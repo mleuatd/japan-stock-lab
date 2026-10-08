@@ -47,3 +47,11 @@ Repository: mleuatd/japan-stock-lab (main). Do not modify mleuatd/dtx-drum-flow.
 - Not yet tested against a real Neon database; cannot claim completed DB ingest or full data durability. Keep raw J-Quants rows private. Do not set DATABASE_URL in public code and do not add direct public read API.
 - Next after owner creates Free project: resolve Neon project ID; verify plan, database and Free quota; create schema and import a SMALL batch with storage measurement, then incremental chunks. Preserve existing ZIP artifact before it expires. Ensure an independent private archive destination; Neon is NOT a backup.
 - Existing `docs/ZERO_COST_ARCHITECTURE.md` lists Turso as earlier preference; current user has explicitly selected Neon Free as target, pending measured storage suitability.
+
+## 2026-10-08 23:07 JST: Neon Free live database created and verified
+
+- After user resolved duplicate Neon projects, confirmed **project ID** `purple-bird-43526306`, name `japan-stock-lab`, region `aws-ap-southeast-1`, owner plan `free_v3`, and 1 GiB logical-size limit, on branch `br-misty-glitter-b3xota3q`.
+- Initial default database was `neondb`; **kept untouched**, and created `japan_stock_lab` with owner `neondb_owner` using linked Neon connector. No paid products were enabled.
+- Applied `sql/001_init.sql` to `japan_stock_lab` in a transaction, then verified four tables: `daily_bar`, `ingest_day`, `security_master`, `backtest_run`. Verified `SELECT current_database()` succeeds and `daily_bar` has **0 rows**. This is a REAL database schema, but raw stock archive has NOT been imported.
+- Fixed SQL comment parsing in `neon_import.py`. It remains dry-run by default and needs PostgreSQL private `DATABASE_URL` and private archived CSVs to apply; no credential should be committed or exposed in public GitHub.
+- Next: verify private durable archive restore and ensure repository Actions secret `DATABASE_URL` is set securely. Measure table footprint and quota BEFORE bulk import. Protect J-Quants private data; do not introduce public query endpoints, and do not start paid plans. Old cache/artifact is not guaranteed durable.
