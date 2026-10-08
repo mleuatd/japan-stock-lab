@@ -67,7 +67,9 @@ def main():
     with psycopg.connect(url, sslmode="require") as con:
         # initialize once; never DROP or TRUNCATE
         with con.transaction():
-            for statement in SCHEMA.read_text(encoding="utf-8").split(";"):
+            schema_lines = (line for line in SCHEMA.read_text(encoding="utf-8").splitlines()
+                            if not line.lstrip().startswith("--"))
+            for statement in "\n".join(schema_lines).split(";"):
                 if statement.strip():
                     con.execute(statement)
         imported=skipped=0
