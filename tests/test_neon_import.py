@@ -22,6 +22,14 @@ class ImportTests(unittest.TestCase):
         day,rows=decode_day(p)
         self.assertEqual((day,len(rows),rows[0][1]),("2025-01-06",1,"7203"))
         self.assertEqual(len(checksum(p)),64)
+    def test_decimal_volume_is_normalized(self):
+        p=self.make_file([["2025-01-06","7203","1","2","1","2","22200.0","200","2","1"]])
+        _,rows=decode_day(p)
+        self.assertEqual(rows[0][6],22200)
+        self.assertIsInstance(rows[0][6],int)
+    def test_fractional_volume_is_rejected(self):
+        p=self.make_file([["2025-01-06","7203","1","2","1","2","22200.5","200","2","1"]])
+        with self.assertRaises(ValueError):decode_day(p)
     def test_duplicate_code_rejected(self):
         row=["2025-01-06","7203","1","2","1","2","100","200","2","1"]
         p=self.make_file([row,row])
