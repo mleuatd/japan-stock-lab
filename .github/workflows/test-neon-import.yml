@@ -1,0 +1,23 @@
+name: Test Neon importer
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'neon_import.py'
+      - 'tests/test_neon_import.py'
+      - '.github/workflows/test-neon-import.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Syntax validation
+        run: python -m py_compile neon_import.py tests/test_neon_import.py
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
