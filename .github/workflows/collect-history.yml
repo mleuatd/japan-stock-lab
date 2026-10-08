@@ -5,13 +5,14 @@ on:
     paths:
       - 'export.py'
       - 'validate_archive.py'
+      - 'private_archive.py'
       - '.github/workflows/collect-history.yml'
   workflow_dispatch:
     inputs:
       batch_days:
         description: Days to request this run
         required: false
-        default: '20'
+        default: '80'
       start:
         description: Optional start date YYYY-MM-DD
         required: false
@@ -49,12 +50,17 @@ jobs:
           key: history-${{ github.run_id }}
           restore-keys: |
             history-
+      - name: Restore durable private history (if configured)
+        env:
+          PRIVATE_ARCHIVE_REPO: ${{ vars.PRIVATE_ARCHIVE_REPO }}
+          PRIVATE_ARCHIVE_TOKEN: ${{ secrets.PRIVATE_ARCHIVE_TOKEN }}
+        run: python private_archive.py restore
       - name: Collect price history
         env:
           JQUANTS_API_KEY: ${{ secrets.JQUANTS_API_KEY }}
           START: ${{ inputs.start }}
           END: ${{ inputs.end }}
-          DAYS: ${{ inputs.batch_days || '20' }}
+          DAYS: ${{ inputs.batch_days || '80' }}
         run: |
           args=(--days "$DAYS")
           if [ -n "$START" ]; then args+=(--start "$START"); fi
@@ -62,6 +68,11 @@ jobs:
           python export.py "${args[@]}"
       - name: Validate saved CSV integrity
         run: python validate_archive.py --root archive/daily
+      - name: Back up validated days into private repository (if configured)
+        env:
+          PRIVATE_ARCHIVE_REPO: ${{ vars.PRIVATE_ARCHIVE_REPO }}
+          PRIVATE_ARCHIVE_TOKEN: ${{ secrets.PRIVATE_ARCHIVE_TOKEN }}
+        run: python private_archive.py backup
       - name: Save archive cache (temporary, not permanent storage)
         if: always()
         uses: actions/cache/save@v4
