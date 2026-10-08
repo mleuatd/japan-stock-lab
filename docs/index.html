@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>日本株ラボ｜ローカル株価検索</title><style>
+body{font:16px/1.65 system-ui,sans-serif;max-width:1050px;margin:auto;padding:20px;background:#f8fafc;color:#152539}
+h1{font-size:1.7rem}input,select,button{font:inherit;padding:.45rem;margin:.2rem;border:1px solid #9baec0;border-radius:5px}
+button{background:#173b66;color:white;cursor:pointer}fieldset{margin:1rem 0;border:1px solid #ccd5df;border-radius:8px}
+table{border-collapse:collapse;width:100%;overflow-x:auto;display:block}th,td{padding:.5rem;border-bottom:1px solid #d4dce5;text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}output{display:block;margin:.7rem 0}label{display:inline-block}
+.note{background:#eaf0f8;padding:.8rem;border-radius:8px}
+</style></head><body><main><h1>日本株ラボ</h1>
+<p>検索条件はURLに保存できます。価格データは公開サーバーに送信せず、このブラウザー内で処理します。</p>
+<section class="note"><strong>初回のみ：</strong>GitHub Actionsの非公開ダウンロードから、日付別 <code>.csv.gz</code> ファイルを選択してください（複数可）。読み込み済みデータはこの端末のブラウザー内に保存します。端末のストレージを消去すると再取り込みが必要です。</section>
+<p><label>日足CSVファイル <input id="files" type="file" accept=".gz" multiple></label><button id="clear">保存データを消去</button></p>
+<output id="status" role="status">読み込み待ち</output>
+<fieldset><legend>検索条件</legend><label>基準日 <select id="date"></select></label>
+<label>並び替え <select id="metric"><option value="change">前営業日比（％）</option><option value="volume">出来高</option><option value="close">終値</option></select></label>
+<label>証券コード <input id="code" placeholder="例：7203" maxlength="8"></label>
+<label>最小出来高 <input id="minvol" type="number" min="0" value="0"></label>
+<label>表示数 <select id="limit"><option>30</option><option>50</option><option>100</option><option>500</option></select></label>
+<button id="run">集計する</button><button id="link">条件付きリンクをコピー</button></fieldset>
+<output id="summary" aria-live="polite"></output>
+<table><thead><tr><th>コード</th><th>終値</th><th>前日終値</th><th>騰落率</th><th>出来高</th></tr></thead><tbody id="rows"></tbody></table>
+<p>注意：銘柄名・市場区分・配当・株主優待情報は現在未搭載。値がない行や分割・上場廃止などを考慮していない単純騰落率を投資判断に利用しないでください。</p></main>
+<script>
+"use strict";
+const $=x=>document.getElementById(x);let db;
+function openDB(){return new Promise((resolve,reject)=>{const req=indexedDB.open("japan-stock-lab",1);req.onupgradeneeded=()=>req.result.createObjectStore("days");req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)})}
+function transaction(mode,fn){return new Promise((resolve,reject)=>{const tx=db.transaction("days",mode),store=tx.objectStore("days");let req=fn(store);req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)})}
+async function dates(){return transaction("readonly",s=>s.getAllKeys())}
+async function read(date){const blob=await transaction("readonly",s=>s.get(date));if(!blob)return [];const text=await new Response(blob.stream().pipeThrough(new DecompressionStream("gzip"))).text();const lines=text.trim().split(/\r?\n/),fields=lines.shift().split(",");return lines.map(line=>{const fieldsData=line.split(",");return Object.fromEntries(fields.map((f,i)=>[f,fieldsData[i]??""]))})}
+function applyQuery(){const p=new URLSearchParams(location.search);for(const name of ["date","metric","code","minvol","limit"]){if(p.has(name))$(name).value=p.get(name)}}
+async function refresh(){const keys=(await dates()).sort();const chosen=$("date").value;$("date").replaceChildren(...keys.map(k=>new Option(k,k)));applyQuery();if(chosen&&keys.includes(chosen)&&!new URLSearchParams(location.search).has("date"))$("date").value=chosen;$("status").textContent=keys.length+" 日分をこのブラウザーに保存済み"}
+function value(x){return x===""||x==null?NaN:Number(x)}
+async function compute(){const all=(await dates()).sort(),day=$("date").value,idx=all.indexOf(day);if(idx<0){$("summary").textContent="日付を選択してください";return}
+const curr=await read(day),prev=idx>0?await read(all[idx-1]):[],past=new Map(prev.map(r=>[r.Code,value(r.C)]));
+const q=$("code").value.trim(),vol=Number($("minvol").value)||0,metric=$("metric").value,limit=Math.min(500,Number($("limit").value)||30);
+const list=curr.filter(r=>r.Code.includes(q)&&value(r.Vo)>=vol).map(r=>{const c=value(r.C),p=past.get(r.Code),change=p>0&&Number.isFinite(c)?(c/p-1)*100:NaN;return {code:r.Code,close:c,prev:p,change,volume:value(r.Vo)}});
+list.sort((a,b)=>((Number.isFinite(b[metric])?b[metric]:-Infinity)-(Number.isFinite(a[metric])?a[metric]:-Infinity))||a.code.localeCompare(b.code));
+const fmt=(n,d=0)=>Number.isFinite(n)?n.toLocaleString("ja-JP",{maximumFractionDigits:d}):"—";
+$("rows").replaceChildren(...list.slice(0,limit).map(r=>{let tr=document.createElement("tr");for(const cell of [r.code,fmt(r.close,2),fmt(r.prev,2),fmt(r.change,2)+"%",fmt(r.volume)]){let td=document.createElement("td");td.textContent=cell;tr.append(td)}return tr}));
+$("summary").textContent=day+"｜対象 "+list.length+" 銘柄｜表示 "+Math.min(limit,list.length)+" 銘柄。前日比は保存データ内の直前日付基準であり、調整済み株価ではありません。";
+history.replaceState(null,"",location.pathname+"?"+new URLSearchParams(Object.fromEntries(["date","metric","code","minvol","limit"].map(k=>[k,$(k).value]))));
+}
+$("files").addEventListener("change",async e=>{try{let count=0;for(const f of e.target.files){const m=f.name.match(/^(\d{4}-\d{2}-\d{2})\.csv\.gz$/);if(!m)continue;const text=await new Response(f.stream().pipeThrough(new DecompressionStream("gzip"))).text();if(!text.startsWith("Date,Code,O,H,L,C,Vo,Va,AdjC,AdjFactor\n"))throw Error(f.name+"：ヘッダー不一致");await transaction("readwrite",s=>s.put(f,m[1]));count++}await refresh();$("status").textContent=count+" ファイルを取り込みました。";await compute()}catch(e){$("status").textContent="取り込みエラー："+e.message}});
+$("run").onclick=()=>compute().catch(e=>$("status").textContent=e.message);
+$("link").onclick=async()=>{await compute();try{await navigator.clipboard.writeText(location.href);$("status").textContent="条件付きリンクをコピーしました"}catch(e){$("status").textContent="URLをアドレスバーからコピーしてください"}};
+$("clear").onclick=async()=>{if(!confirm("ブラウザー内の株価データを消去しますか？"))return;db.close();indexedDB.deleteDatabase("japan-stock-lab");location.reload()};
+openDB().then(async d=>{db=d;await refresh();if($("date").value)await compute()}).catch(e=>$("status").textContent="保存機能が利用できません："+e.message);
+</script></body></html>
