@@ -1,5 +1,11 @@
 name: Collect delayed J-Quants history
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'export.py'
+      - 'validate_archive.py'
+      - '.github/workflows/collect-history.yml'
   workflow_dispatch:
     inputs:
       batch_days:
@@ -54,6 +60,8 @@ jobs:
           if [ -n "$START" ]; then args+=(--start "$START"); fi
           if [ -n "$END" ]; then args+=(--end "$END"); fi
           python export.py "${args[@]}"
+      - name: Validate saved CSV integrity
+        run: python validate_archive.py --root archive/daily
       - name: Save archive cache (temporary, not permanent storage)
         if: always()
         uses: actions/cache/save@v4
