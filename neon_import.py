@@ -12,6 +12,7 @@ import gzip
 import hashlib
 import os
 from pathlib import Path
+from decimal import Decimal, InvalidOperation
 
 COLUMNS = ("Date","Code","O","H","L","C","Vo","Va","AdjC","AdjFactor")
 INSERT = """INSERT INTO daily_bar
@@ -36,7 +37,16 @@ def decode_day(path):
             if r["Date"] != date or not r["Code"] or r["Code"] in seen:
                 raise ValueError(f"invalid or duplicate date/code: {path}")
             seen.add(r["Code"])
-            rows.append(tuple(None if r[k] in ("",None) else r[k] for k in COLUMNS))
+            values = [None if r[k] in ("",None) else r[k] for k in COLUMNS]
+            if values[6] is not None:
+                try:
+                    volume = Decimal(values[6])
+                    if not volume.is_finite() or volume < 0 or volume != volume.to_integral_value():
+                        raise ValueError("volume must be a nonnegative whole number")
+                    values[6] = int(volume)
+                except (InvalidOperation, ValueError) as exc:
+                    raise ValueError(f"invalid volume in {path}") from exc
+            rows.append(tuple(values))
     if not rows:
         raise ValueError(f"empty day: {path}")
     return date, rows
