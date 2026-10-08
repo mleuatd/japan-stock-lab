@@ -26,3 +26,15 @@ Repository: mleuatd/japan-stock-lab (main). Do not modify mleuatd/dtx-drum-flow.
 4. A rate-limit policy, API quota monitoring, full-period completeness audit, durable incremental checkpoints, and multi-year historical backfill remain to be implemented.
 5. Full-market rankings, Kochi shop/benefit matching, financial filters, and virtual trading/backtests have not yet been built.
 6. Never disclose JQUANTS_API_KEY, never place collected API rows or generated CSVs in public GitHub.
+
+## 2026-10-08 20:31 JST update: run #2 verified
+
+- Run #2 https://github.com/mleuatd/japan-stock-lab/actions/runs/37769932666 completed successfully.
+- Run #2 restored cache from run #1; skipped 18 stored market days; attempted 20 previously unfilled weekdays, saved 18 and got NO_DATA on 2024-10-14 and 2024-11-04.
+- Output validator passed: **36 files, 158,194 rows, 4,414 distinct codes, 7,003 null-close rows**, range 2024-10-08 through 2024-11-28.
+- Run #3 https://github.com/mleuatd/japan-stock-lab/actions/runs/37770638235 started, running at last check. Its final result has not yet been verified.
+- New file `private_archive.py` supports optional durable backups in a separate **PRIVATE** GitHub repo. Needs `PRIVATE_ARCHIVE_REPO` GitHub Actions variable and `PRIVATE_ARCHIVE_TOKEN` secret (narrowly scoped Contents read/write). It downloads existing private daily files to restore cache gaps; sends only missing daily files when archiving. Unconfigured means cache + artifacts only. It has not yet been tested end-to-end with a real private destination.
+- Collector default batch increased from 20 to 80 weekday requests. Already saved CSV dates skipped.
+- `docs/index.html`: browser-only, IndexedDB-backed market filter prototype; handles locally loaded `.csv.gz`, never serves licensed rows on public Pages. Supports URL filters date/metric/code/minvol/limit, but links only work on browser already holding local market files. No live GitHub Pages URL until deployment configured.
+- **Architecture decision:** compressed partitioned CSV is durable source-of-truth; an analytical DuckDB database should be constructed from those files in a private environment when advanced window functions/backtests are implemented. Avoid committing DuckDB database or raw bars in public repo. Derived metadata may include manifests with date, row counts, checksums but avoid public re-distribution of licensed data.
+- Next steps: verify #3 successful; provision private storage; archive and restore full historical dataset; use exchange trading calendar to avoid retrying closed days; ensure staged backfill to all accessible dates; verify license before serving quotes publicly; add analytical query layer and more dashboard filters.
