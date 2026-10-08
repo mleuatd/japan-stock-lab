@@ -52,7 +52,10 @@ def main():
     ap=argparse.ArgumentParser()
     ap.add_argument("--root",default="archive/daily")
     ap.add_argument("--apply",action="store_true",help="Actually insert into private Postgres")
+    ap.add_argument("--max-days",type=int,default=5,help="Maximum new trading days per run (default 5)")
     args=ap.parse_args()
+    if args.max_days < 1 or args.max_days > 20:
+        raise SystemExit("--max-days must be 1..20 for safe incremental Neon Free imports")
     paths=sorted(Path(args.root).rglob("*.csv.gz"))
     if not paths:
         raise SystemExit("No source CSV.gz files; existing archive is required")
@@ -74,6 +77,12 @@ def main():
                     con.execute(statement)
         imported=skipped=0
         for path in paths:
+            if imported >= args.max_days:
+                print("Batch limit reached; resume next run", flush=True)
+                break
+            size=con.execute("SELECT pg_database_size(current_database())").fetchone()[0]
+            if size >= 700_000_000:
+                raise SystemExit("STOP: DB >= 700MB safety threshold; no further imports")
             date=path.name.removesuffix(".csv.gz")
             # Only complete dates are skipped: avoid re-import and API re-fetch.
             state=con.execute("SELECT state FROM ingest_day WHERE trading_date=%s",(date,)).fetchone()
