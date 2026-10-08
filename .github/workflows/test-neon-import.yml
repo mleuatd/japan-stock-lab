@@ -4,6 +4,8 @@ on:
     branches: [main]
     paths:
       - 'neon_import.py'
+      - 'analyze_archive.py'
+      - 'tests/test_analyze_archive.py'
       - 'tests/test_neon_import.py'
       - '.github/workflows/test-neon-import.yml'
   workflow_dispatch:
@@ -18,6 +20,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Syntax validation
-        run: python -m py_compile neon_import.py tests/test_neon_import.py
+        run: python -m py_compile neon_import.py analyze_archive.py tests/test_neon_import.py tests/test_analyze_archive.py
       - name: Unit tests
         run: python -m unittest discover -s tests -v
