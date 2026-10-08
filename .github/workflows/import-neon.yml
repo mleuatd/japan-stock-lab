@@ -1,6 +1,9 @@
 name: Import archived days to Neon Free
 on:
   workflow_dispatch:
+  schedule:
+    # 23:15 JST on weekdays, after the existing evening collection job.
+    - cron: '15 14 * * 1-5'
   push:
     branches: [main]
     paths:
