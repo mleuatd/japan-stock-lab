@@ -1,6 +1,12 @@
 name: Import archived days to Neon Free
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'neon_import.py'
+      - 'tests/test_neon_import.py'
+      - '.github/workflows/import-neon.yml'
 permissions:
   contents: read
 concurrency:
