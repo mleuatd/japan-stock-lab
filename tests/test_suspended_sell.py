@@ -26,6 +26,7 @@ class SuspendedSellTests(unittest.TestCase):
         dates=[(dt.date(2025,1,1)+dt.timedelta(days=i)).isoformat() for i in range(123)]
         data={d:{"11110":Bar(d,"11110",100,100,100000,100)} for d in dates}
         cutoff,start=dates[119],dates[120]
+        data[dates[121]]={}
         data[dates[-1]]={}
         result=replay(data,{"lookback":3,"min_return_pct":0,"min_volume":0},
                       cutoff=cutoff,start=start,fee_rate=0,hold_days=1,allocation=10000)
