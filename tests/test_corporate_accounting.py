@@ -53,6 +53,14 @@ class CorporateAccountingTests(unittest.TestCase):
                                                         "entitlement_date":self.cutoff}}})
         self.assertEqual(result["known_net_dividends"],0)
 
+    def test_dividend_paid_after_sale_to_prior_entitled_holder(self):
+        day=self.days[121]
+        r=replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
+                 allocation=10000,hold_days=1,fee_rate=0,
+                 corporate_actions={day:{"11110":{"cash_dividend_per_share":10,
+                                                      "entitlement_date":self.days[120]}}})
+        self.assertEqual(r["known_net_dividends"],1000)
+
     def test_split_preserves_cost_basis_and_no_negative_cash(self):
         # Existing January signal opens a 100-share position on the first test day.
         split_day=self.days[121]
