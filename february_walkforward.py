@@ -32,6 +32,7 @@ def candidate_rules():
 def frozen_train(data,cutoff,min_events=25):
     dates=[d for d in sorted(data) if d<=cutoff]
     if len(dates)<120: raise ValueError("Insufficient pre-cutoff history")
+    day_index={d:i for i,d in enumerate(dates)}
     # All model tuning is strictly prior to cutoff.
     split=int(len(dates)*.7)
     next_session={day:dates[j+1] for j,day in enumerate(dates[:-1])}
@@ -47,9 +48,13 @@ def frozen_train(data,cutoff,min_events=25):
                 if d>cutoff:break
                 # Observe close on d; buy next OPEN; sell subsequent OPEN.
                 # Both future prices must also be <= cutoff for training.
+                # The entire lookback must have uninterrupted market sessions,
+                # not just the two future execution sessions.
                 if (bars[i+2].date>cutoff or bars[i+1].open<=0 or
                     bars[i+1].date != next_session.get(d) or
-                    bars[i+2].date != next_session.get(bars[i+1].date)):
+                    bars[i+2].date != next_session.get(bars[i+1].date) or
+                    day_index[d]-day_index.get(bars[i-rule["lookback"]].date,-100000)
+                       !=rule["lookback"]):
                     continue
                 # Equivalent to rule_matches(bars[:i+1], rule) without
                 # allocating an ever-growing prefix for every candidate.
@@ -94,6 +99,9 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
     # A corporate event must not be assigned to holdings created after entitlement.
     # For dividends, entitlement_date (ex-date prior close) is mandatory.
     dividend_entitled={}
+    entitlement_dates={(code,event["entitlement_date"]) for by_code in corporate_actions.values()
+                       for code,event in by_code.items()
+                       if "cash_dividend_per_share" in event and "entitlement_date" in event}
     realized_pnl=0.0
     known_dividends=0.0
     for n,day in enumerate(dates):
@@ -104,10 +112,10 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
         for code,event in corporate_actions.get(day,{}).items():
             pos=positions.get(code)
             if "split_ratio" in event:
-                if pos is None: continue
                 ratio=event["split_ratio"]
                 if not (isinstance(ratio,(int,float)) and 0 < ratio < float("inf")):
                     raise ValueError("Invalid split ratio")
+                if pos is None: continue
                 new_qty=pos["qty"]*ratio
                 if abs(new_qty-round(new_qty))>1e-8:
                     raise ValueError("Fractional share cash-out requires an explicit event")
@@ -162,7 +170,8 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
         queue=[]
         for code,b in bars.items():hist[code].append(b)
         for code,pos in positions.items():
-            dividend_entitled[(code,day)]=pos["qty"]
+            if (code,day) in entitlement_dates:
+                dividend_entitled[(code,day)]=pos["qty"]
         if day<cutoff:continue
         # Decisions at CLOSE, after that session has become observable.
         exiting=set()
@@ -205,9 +214,17 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
             max_dd=max(max_dd,(high-value)/high*100)
     else:
         max_dd=None
+    # Account identity: final assets equal contributed capital + closed-trade
+    # realized profits + dividends + unsold mark-to-market gains.
+    final_equity=known_values[-1] if known_values else None
+    unrealized=sum((positions[code]["qty"]*data[dates[-1]][code].close-
+                    positions[code]["cost"]) for code in positions) if final_equity is not None else None
+    if final_equity is not None and abs(final_equity-(initial+realized_pnl+known_dividends+unrealized))>0.03:
+        raise AssertionError("Portfolio accounting identity failed")
     return {"cash":round(cash,2),"held":positions,"fills":ledger,"equity":daily,
             "final_equity":known_values[-1] if known_values else None,
             "realized_pnl":round(realized_pnl,2),
+            "unrealized_pnl":round(unrealized,2) if unrealized is not None else None,
             "known_net_dividends":round(known_dividends,2),
             "max_drawdown_pct":round(max_dd,4) if max_dd is not None else None,
             "unfilled_after_final_session":queue,
