@@ -68,6 +68,7 @@ def summarize(row, cutoff="2026-01-30", maximum_lag_days=10, today=None):
     if output["stale"]:issues.append("STALE_DATA")
     if output["required_null_rows"] or output["invalid_value_rows"]:
         issues.append("INVALID_OR_INCOMPLETE_BAR_ROWS")
+    if output["null_factor_rows"]:issues.append("UNKNOWN_ADJUSTMENT_FACTORS")
     if output["nonunit_factor_rows"]:
         issues.append("CORPORATE_ACTION_RECONCILIATION_REQUIRED")
     if output["holdout_rows"]==0:issues.append("NO_HOLDOUT_DATA")
