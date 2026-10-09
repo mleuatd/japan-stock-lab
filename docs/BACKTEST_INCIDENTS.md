@@ -47,3 +47,11 @@
 - `7c54a67b7130be76726827c0fd8e715aa035acaa`: 隔日欠損の回帰テストを追加。
 - `5bd4087f1b2dc3730667df8374e14c9eadf29a93`: テスト更新でも軽量CIが実行されるよう対象パスを追加。
 - 欠損銘柄の市場取引停止、上場廃止、企業行動、配当についての完全検証は未完了。Issue #3 はcloseしない。
+
+
+## 2026-10-10 一括企業行動・会計処理の部分実装（作業ブランチ）
+- Explicit dated split and payment-date cash dividend events, positive ratio and integer-share invariant.
+- Fee/slippage and positive realized profit tax parameters; negative cash invariant.
+- Added tests/test_corporate_accounting.py, unified light CI test discovery.
+- **P0 remains OPEN**: Neon daily_bar has adjustment_factor but not complete verified dividend payment records or fractional entitlement cashouts. Do not claim actual portfolio return until external corporate-event ledger is sourced and reconciled.
+- Real Neon backtest on existing workflow is not restarted by this patch; full-Neon test is manual only.
