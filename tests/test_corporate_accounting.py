@@ -48,9 +48,9 @@ class CorporateAccountingTests(unittest.TestCase):
 
     def test_slippage_reduces_equity_and_preserves_cash(self):
         base=replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
-                    allocation=10000,hold_days=90,fee_rate=0)
+                    allocation=12000,hold_days=90,fee_rate=0)
         worse=replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
-                     allocation=10000,hold_days=90,fee_rate=0,slippage_rate=.01)
+                     allocation=12000,hold_days=90,fee_rate=0,slippage_rate=.01)
         self.assertLess(worse["equity"][-1]["total_equity"],base["equity"][-1]["total_equity"])
         self.assertGreaterEqual(worse["cash"],0)
 
