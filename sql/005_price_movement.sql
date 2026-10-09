@@ -68,13 +68,16 @@ WITH movements AS (
  WHEN pct_change<0 THEN 'down'
  WHEN pct_change=0 THEN 'flat' ELSE 'unknown' END AS direction
  FROM price_daily_movement m
-), islands AS (
+), flags AS (
  SELECT movements.*,
- SUM(CASE WHEN direction='unknown'
+ CASE WHEN direction='unknown'
    OR LAG(direction) OVER (PARTITION BY security_code ORDER BY trading_date) IS DISTINCT FROM direction
-   THEN 1 ELSE 0 END)
- OVER (PARTITION BY security_code ORDER BY trading_date ROWS UNBOUNDED PRECEDING) AS grp
+   THEN 1 ELSE 0 END AS starts_new_group
  FROM movements
+), islands AS (
+ SELECT flags.*,
+ SUM(starts_new_group) OVER (PARTITION BY security_code ORDER BY trading_date ROWS UNBOUNDED PRECEDING) AS grp
+ FROM flags
 )
 SELECT trading_date,security_code,adjusted_close,prior_close,prior_date,pct_change,
  band_code,band_name,polarity,direction,
