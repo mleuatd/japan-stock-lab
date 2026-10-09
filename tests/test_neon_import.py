@@ -3,7 +3,7 @@ import gzip
 import tempfile
 import unittest
 from pathlib import Path
-from neon_import import decode_day, checksum, COLUMNS
+from neon_import import decode_day, checksum, source_fetched_at, COLUMNS
 
 class ImportTests(unittest.TestCase):
     def make_file(self, rows):
@@ -30,6 +30,13 @@ class ImportTests(unittest.TestCase):
     def test_fractional_volume_is_rejected(self):
         p=self.make_file([["2025-01-06","7203","1","2","1","2","22200.5","200","2","1"]])
         with self.assertRaises(ValueError):decode_day(p)
+    def test_fetch_timestamp_from_sidecar(self):
+        p=self.make_file([["2025-01-06","7203","1","2","1","2","100","200","2","1"]])
+        self.assertIsNone(source_fetched_at(p))
+        sidecar=p.with_name(p.name+".fetch.json")
+        sidecar.write_text('{"fetched_at":"2026-10-09T01:00:00+00:00"}')
+        stamp=source_fetched_at(p)
+        self.assertEqual(stamp.isoformat(),"2026-10-09T01:00:00+00:00")
     def test_duplicate_code_rejected(self):
         row=["2025-01-06","7203","1","2","1","2","100","200","2","1"]
         p=self.make_file([row,row])
