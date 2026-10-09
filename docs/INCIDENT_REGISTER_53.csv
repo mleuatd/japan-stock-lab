@@ -1,0 +1,54 @@
+id,priority,status,item
+1,P0,IN_PROGRESS,cash reconciliation
+2,P0,IN_PROGRESS,share and cost basis
+3,P0,BLOCKED_EXTERNAL_DATA,splits and consolidation
+4,P0,IN_PROGRESS,dividend dates
+5,P0,IN_PROGRESS,exit orders
+6,P0,IN_PROGRESS,retry non-executable sells
+7,P0,IN_PROGRESS,suspension and zero volume
+8,P0,IN_PROGRESS,lot size and cash cap
+9,P0,IN_PROGRESS,lookahead prevention
+10,P0,IN_PROGRESS,unknown asset value gate
+11,P0,IN_PROGRESS,held symbols versus missing quotes
+12,P0,BLOCKED_EXTERNAL_DATA,corporate actions versus fills
+13,P0,BLOCKED_EXTERNAL_DATA,delisting/merger
+14,P0,BLOCKED_DEPENDENCY,verified final equity
+15,P1,NOT_STARTED,buy/sell combinations
+16,P1,NOT_STARTED,holding horizons
+17,P1,IN_PROGRESS,stop and profit exits
+18,P1,IN_PROGRESS,entry candidate ranking
+19,P1,NOT_STARTED,max holdings
+20,P1,NOT_STARTED,capital allocation
+21,P1,IN_PROGRESS,fees taxes slippage
+22,P1,IN_PROGRESS,overfitting prevention
+23,P1,IN_PROGRESS,train-test split
+24,P1,NOT_STARTED,rolling walk-forward
+25,P1,IN_PROGRESS,return and drawdown
+26,P1,NOT_STARTED,cash baseline
+27,P1,BLOCKED_DEPENDENCY,40 strategies real-data
+28,P1,BLOCKED_DEPENDENCY,best strategy selection
+29,P1,IN_PROGRESS,69-minute bottleneck
+30,P1,IN_PROGRESS,shared rule computations
+31,P1,IN_PROGRESS,history loading
+32,P1,IN_PROGRESS,Neon query count
+33,P1,IN_PROGRESS,selective loading
+34,P1,IN_PROGRESS,fast versus baseline equality
+35,P1,IN_PROGRESS,memory cap
+36,P1,IN_PROGRESS,timeout safety
+37,P1,IN_PROGRESS,workflow logging
+38,P1,IN_PROGRESS,partial result fail-gate
+39,P2,IN_PROGRESS,schema and indexes
+40,P2,IN_PROGRESS,key duplicates
+41,P2,IN_PROGRESS,missing quotes
+42,P2,IN_PROGRESS,invalid quotes and volumes
+43,P2,IN_PROGRESS,J-Quants available dates
+44,P2,IN_PROGRESS,incremental ingestion
+45,P2,IN_PROGRESS,overnight ingest
+46,P2,IN_PROGRESS,free tier load
+47,P2,IN_PROGRESS,failure retry notifications
+48,P2,IN_PROGRESS,GitHub Issues
+49,P2,IN_PROGRESS,PR CI merge
+50,P2,IN_PROGRESS,secret redaction
+51,P2,BLOCKED_PERMISSION,Actions dispatch permissions
+52,P2,IN_PROGRESS,no brokerage orders
+53,P2,BLOCKED_EXTERNAL_DATA,sourced missing price/action
