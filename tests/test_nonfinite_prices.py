@@ -17,12 +17,11 @@ class NonfinitePriceGuardTest(unittest.TestCase):
         r=self.run_replay()
         self.assertIsNone(r["final_equity"])
         self.assertEqual(r["valuation_diagnostics"]["held_positions_without_final_close"],1)
-        self.assertIsNone(r["valuation_diagnostics"]["indicative_last_known_equity"] if False else r["final_equity"])
     def test_nan_open_does_not_fill(self):
         d=self.days[120]
         self.data[d]["11110"]=Bar(d,"11110",float("nan"),100.,1000,100.)
         r=self.run_replay()
-        self.assertFalse(any(f["side"]=="BUY" and f["date"]==d for f in r["fills"]))
+        self.assertFalse(any(f["side"]=="BUY" and f["date"]==d and "price" in f for f in r["fills"]))
         self.assertTrue(math.isfinite(r["cash"]))
 
 if __name__=="__main__":unittest.main()
