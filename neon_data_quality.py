@@ -16,10 +16,15 @@ SELECT
   MAX(trading_date)::text AS last_date,
   COUNT(DISTINCT security_code) AS symbols,
   COUNT(*) FILTER (WHERE trading_date > %s) AS holdout_rows,
-  COUNT(*) FILTER (WHERE trading_date > %s AND adjustment_factor IS DISTINCT FROM 1)
+  COUNT(*) FILTER (WHERE trading_date > %s AND adjustment_factor IS NOT NULL AND adjustment_factor <> 1)
        AS holdout_nonunit_factor_rows,
-  COUNT(*) FILTER (WHERE adjustment_factor IS DISTINCT FROM 1)
+  COUNT(*) FILTER (WHERE adjustment_factor IS NOT NULL AND adjustment_factor <> 1)
        AS nonunit_factor_rows,
+  COUNT(*) FILTER (WHERE adjustment_factor IS NULL) AS null_factor_rows,
+  COUNT(*) FILTER (WHERE open_price IS NULL) AS missing_open_rows,
+  COUNT(*) FILTER (WHERE close_price IS NULL) AS missing_close_rows,
+  COUNT(*) FILTER (WHERE adjusted_close IS NULL) AS missing_adjusted_close_rows,
+  COUNT(*) FILTER (WHERE volume IS NULL) AS missing_volume_rows,
   COUNT(*) FILTER (WHERE open_price IS NULL OR close_price IS NULL
                     OR adjusted_close IS NULL OR volume IS NULL) AS required_null_rows,
   COUNT(*) FILTER (WHERE open_price <= 0 OR close_price <= 0
@@ -46,6 +51,11 @@ def summarize(row, cutoff="2026-01-30", maximum_lag_days=10, today=None):
             "symbols":int(row["symbols"]),
             "holdout_rows":int(row["holdout_rows"]),
             "nonunit_factor_rows":int(row["nonunit_factor_rows"]),
+            "null_factor_rows":int(row.get("null_factor_rows",0)),
+            "missing_open_rows":int(row.get("missing_open_rows",0)),
+            "missing_close_rows":int(row.get("missing_close_rows",0)),
+            "missing_adjusted_close_rows":int(row.get("missing_adjusted_close_rows",0)),
+            "missing_volume_rows":int(row.get("missing_volume_rows",0)),
             "holdout_nonunit_factor_rows":int(row["holdout_nonunit_factor_rows"]),
             "required_null_rows":int(row["required_null_rows"]),
             "invalid_value_rows":int(row["invalid_value_rows"]),
@@ -61,6 +71,11 @@ def summarize(row, cutoff="2026-01-30", maximum_lag_days=10, today=None):
     if output["nonunit_factor_rows"]:
         issues.append("CORPORATE_ACTION_RECONCILIATION_REQUIRED")
     if output["holdout_rows"]==0:issues.append("NO_HOLDOUT_DATA")
+    output["missing_required_field_counts"]={
+        "open":output["missing_open_rows"],
+        "close":output["missing_close_rows"],
+        "adjusted_close":output["missing_adjusted_close_rows"],
+        "volume":output["missing_volume_rows"]}
     output["blocking_issues"]=issues
     output["validation_status"]="PROVISIONAL_UNVERIFIED"
     return output

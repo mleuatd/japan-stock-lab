@@ -31,6 +31,21 @@ class QualityTest(unittest.TestCase):
         self.assertEqual(report["blocking_issues"],[])
         self.assertEqual(report["validation_status"],"PROVISIONAL_UNVERIFIED")
 
+    def test_null_adjustment_factor_is_distinct_from_nonunit_factor(self):
+        row=self.fixture()
+        row.update(nonunit_factor_rows=0, holdout_nonunit_factor_rows=0,
+                   null_factor_rows=3, missing_open_rows=2)
+        result=summarize(row,today="2026-10-10")
+        self.assertEqual(result["nonunit_factor_rows"],0)
+        self.assertIn("UNKNOWN_ADJUSTMENT_FACTORS",result["blocking_issues"])
+        self.assertNotIn("CORPORATE_ACTION_RECONCILIATION_REQUIRED",result["blocking_issues"])
+        self.assertEqual(result["missing_required_field_counts"]["open"],2)
+
+    def test_query_distinguishes_missing_from_nonunit_factors(self):
+        normalized=" ".join(QUERY.upper().split())
+        self.assertIn("ADJUSTMENT_FACTOR IS NULL",normalized)
+        self.assertIn("ADJUSTMENT_FACTOR IS NOT NULL AND ADJUSTMENT_FACTOR <> 1",normalized)
+
     def test_query_only_reads_aggregate(self):
         normalized=QUERY.upper()
         self.assertEqual(normalized.count("%S"),4)
