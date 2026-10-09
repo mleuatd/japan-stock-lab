@@ -30,3 +30,15 @@ When J-Quants eventually supplies a date, normal importer inserts `daily_bar`; t
 5. Add separate backtest options: authoritative-only by default, or knowingly opt into provisional. No data exposure on unauthenticated public GitHub Pages.
 
 Do not claim recent prices are already collected until the provisional table actually has validated rows.
+
+
+## 2026-10-09 source search update — verifiable free recent prices vs reusable bulk-feed access
+
+- **JPX Tokyo Stock Exchange Daily Report** `https://www.jpx.co.jp/markets/statistics-equities/daily/index.html`: daily per-issue `株式相場表` PDFs are freely displayed; official site search indexed actual October 2026 files `/automation/markets/statistics-equities/daily/files/202610/stq_20261001.pdf`, `stq_20261002.pdf`, and other trading dates. The sample text contains ticker, session OHLC, closing price, daily volume and turnover. This is a credible primary-source **free display/download** candidate, but its web terms explicitly restrict repurposing / redistribution without permission and ask users to refrain from high-load automated acquisition. **Do not run a scraper or bulk import without explicit permission/licensing clarification.** Official terms: `https://www.jpx.co.jp/term-of-use/index.html`.
+- **Stooq**: `.JP` ticker OHLC CSV historically free for personal download. As of 2026 CSV retrieval requires an API key obtained through CAPTCHA; no authenticated batch quota or fully permitted unattended CI workflow established. Free download is not equivalent to approved whole-exchange bulk replication; do not install an unattended downloader before authorizing use and testing code coverage. See `https://stooq.com/q/d/?s=7203.jp&get_apikey`. The key, if used, must be private GitHub Actions Secret only.
+- **Twelve Data**: Free Basic advertises 800 credits/day, but detailed pricing offers **global trial symbols** rather than full Japanese market entitlement. Japan EOD market-wide access belongs to higher paid international plans, so Basic isn't a confirmed zero-cost solution for ~4,700 Tokyo symbols/day.
+- **KABU+**: Tokyo-exchange-authorized automatic whole-market CSV is supported technically but is a paid membership, hence **excluded** under strict ¥0 policy.
+- **JPX monthly quotes** `https://www.jpx.co.jp/markets/statistics-equities/price/index.html`: official free monthly per-stock aggregated OHLC; not equivalent to daily data needed for top-30 ranks.
+- Yahoo/yfinance: unapproved bulk website extraction and potential blocking; not suitable for a permitted reliable free production pipeline.
+
+**Outcome:** Found a free authoritative **daily publication** (JPX PDF), but **not yet a verified, licensed ¥0 unattended all-ticker daily feed**. Existing `provisional_bar` is empty; do not claim recent data ingestion. Next action is seek permission for low-rate personal automated archival/import of JPX PDFs or Stooq owner permission for a defined 4,700 symbols/day budget, or switch to consented manual PDF/CSV upload. Never publish raw licensed data through public GitHub Pages.
