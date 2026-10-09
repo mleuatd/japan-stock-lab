@@ -93,7 +93,7 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
     cash=float(initial);positions={};queue=[];ledger=[];daily=[]
     # A corporate event must not be assigned to holdings created after entitlement.
     # For dividends, entitlement_date (ex-date prior close) is mandatory.
-    dividend_entitled=set()
+    dividend_entitled={}
     realized_pnl=0.0
     known_dividends=0.0
     for n,day in enumerate(dates):
@@ -102,10 +102,9 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
         # never from data observed later. See capture after close below.
         # Apply only sourced and explicitly supplied corporate actions.
         for code,event in corporate_actions.get(day,{}).items():
-            if code not in positions:
-                continue
-            pos=positions[code]
+            pos=positions.get(code)
             if "split_ratio" in event:
+                if pos is None: continue
                 ratio=event["split_ratio"]
                 if not (isinstance(ratio,(int,float)) and 0 < ratio < float("inf")):
                     raise ValueError("Invalid split ratio")
@@ -118,13 +117,14 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                 entitlement=event.get("entitlement_date")
                 if entitlement is None or entitlement >= day or entitlement not in dates:
                     raise ValueError("Dividend requires a prior observed entitlement date")
-                if (code,entitlement) not in dividend_entitled:
+                entitled_qty=dividend_entitled.get((code,entitlement),0)
+                if not entitled_qty:
                     ledger.append({"date":day,"code":code,"side":"ACTION","status":"NO_DIVIDEND_ENTITLEMENT"})
                     continue
                 amount=event["cash_dividend_per_share"]
                 if not (isinstance(amount,(int,float)) and 0 <= amount < float("inf")):
                     raise ValueError("Invalid dividend")
-                gross=pos["qty"]*amount
+                gross=entitled_qty*amount
                 net=gross*(1-tax_rate)
                 cash+=net
                 known_dividends+=net
@@ -161,8 +161,8 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                     ledger.append({"date":day,"code":code,"side":"BUY","qty":qty,"price":round(execution_price,4)})
         queue=[]
         for code,b in bars.items():hist[code].append(b)
-        for code in positions:
-            dividend_entitled.add((code,day))
+        for code,pos in positions.items():
+            dividend_entitled[(code,day)]=pos["qty"]
         if day<cutoff:continue
         # Decisions at CLOSE, after that session has become observable.
         exiting=set()
@@ -178,7 +178,7 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                 continue
             history=hist[code]
             # Never treat sparse per-security rows as consecutive sessions.
-            if len(history) < lookback+1 or history[-1-lookback].date != dates[n-lookback] if n>=lookback else True:
+            if n < lookback or len(history) < lookback+1 or history[-1-lookback].date != dates[n-lookback]:
                 continue
             if not rule_matches(history,rule):
                 continue
