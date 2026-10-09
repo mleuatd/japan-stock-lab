@@ -5,8 +5,10 @@ on:
     paths:
       - 'walkforward_backtest.py'
       - 'nightly_paper_plan.py'
+      - 'discover_patterns.py'
       - 'tests/test_walkforward_backtest.py'
       - 'tests/test_nightly_paper_plan.py'
+      - 'tests/test_discover_patterns.py'
       - '.github/workflows/test-walkforward.yml'
   workflow_dispatch:
 permissions:
@@ -20,4 +22,4 @@ jobs:
         with:
           python-version: '3.12'
       - name: Test lookahead, next-session execution, missing prices, fees
-        run: python -m unittest discover -s tests -p 'test_*backtest.py' -v && python -m unittest discover -s tests -p 'test_nightly_paper_plan.py' -v
+        run: python -m unittest discover -s tests -p 'test_*backtest.py' -v && python -m unittest discover -s tests -p 'test_nightly_paper_plan.py' -v && python -m unittest discover -s tests -p 'test_discover_patterns.py' -v
