@@ -260,6 +260,30 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
     final_missing_prices=sum(
         1 for code in positions if code not in data[final_session]
         or data[final_session][code].close<=0) if final_session else 0
+    # A stale quote is only an INDICATIVE scenario, never an actual final quote.
+    # This exposes a usable estimate while preserving official final_equity=None.
+    last_known_close={}
+    for observed_day in dates:
+        for ticker,bar in data[observed_day].items():
+            if bar.close>0:
+                last_known_close[ticker]=(observed_day,bar.close)
+    stale_marks=[]
+    indicative_equity=cash
+    missing_stale_marks=0
+    for ticker,pos in positions.items():
+        quote=data[final_session].get(ticker) if final_session else None
+        if quote is not None and quote.close>0:
+            indicative_equity+=pos["qty"]*quote.close
+        elif ticker in last_known_close:
+            quoted_day,stale_price=last_known_close[ticker]
+            indicative_equity+=pos["qty"]*stale_price
+            stale_marks.append({"last_quote_date":quoted_day,
+                                "stale_calendar_days":(__import__("datetime").date.fromisoformat(final_session)-
+                                      __import__("datetime").date.fromisoformat(quoted_day)).days,
+                                "notional_value":round(pos["qty"]*stale_price,2)})
+        else:
+            missing_stale_marks+=1
+    last_known_estimate=(round(indicative_equity,2) if missing_stale_marks==0 else None)
     known_values=[day["total_equity"] for day in daily]
     if all(v is not None for v in known_values):
         high=initial
@@ -290,6 +314,12 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                 "held_positions_final":len(positions),
                 "held_positions_without_final_close":final_missing_prices,
                 "final_equity_available":final_equity is not None,
+                "indicative_last_known_equity":last_known_estimate,
+                "indicative_valuation_method":"MOST_RECENT_KNOWN_CLOSE_UNVERIFIED_NOT_TRADABLE",
+                "indicative_stale_positions":len(stale_marks),
+                "indicative_missing_price_positions":missing_stale_marks,
+                "indicative_oldest_quote_calendar_days":max(
+                    (x["stale_calendar_days"] for x in stale_marks),default=0),
                 "requires_source_data_review":bool(valuation_gaps)},
             "validation_status":"PROVISIONAL_UNVERIFIED",
             "accounting_note":"Corporate actions require complete dated external events; no automatic inference."}
