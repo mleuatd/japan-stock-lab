@@ -6,6 +6,7 @@ on:
     paths:
       - 'fast_strategy_grid.py'
       - 'tests/test_fast_strategy_grid.py'
+      - 'tests/test_accuracy_regression.py'
       - '.github/workflows/fast-strategy-grid.yml'
 permissions:
   contents: read
@@ -22,7 +23,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Unit tests
-        run: python -m unittest discover -s tests -p 'test_fast_strategy_grid.py' -v
+        run: python -m unittest discover -s tests -p 'test_fast_strategy_grid.py' -v && python -m unittest discover -s tests -p 'test_accuracy_regression.py' -v
       - name: Install private Neon driver
         run: python -m pip install 'psycopg[binary]>=3,<4'
       - name: Run fixed-training buy/sell comparison
