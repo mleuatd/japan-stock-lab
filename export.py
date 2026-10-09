@@ -49,6 +49,11 @@ def save_day(day, rows, root):
         with gzip.GzipFile(filename="",mode="wb",fileobj=handle,mtime=0) as zipped:
             zipped.write(buf.getvalue().encode())
     os.replace(tmp,dest)
+    fetched_at=dt.datetime.now(dt.timezone.utc).isoformat()
+    sidecar=dest.with_name(dest.name + '.fetch.json')
+    side_tmp=sidecar.with_name(sidecar.name + '.tmp')
+    side_tmp.write_text(json.dumps({'fetched_at': fetched_at, 'source': 'J-Quants V2'}, ensure_ascii=False) + '\n', encoding='utf-8')
+    os.replace(side_tmp,sidecar)
     return True
 
 def run():
