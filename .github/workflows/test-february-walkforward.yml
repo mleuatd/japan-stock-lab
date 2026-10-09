@@ -1,0 +1,49 @@
+name: February 2026 Frozen Walk-forward
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'february_walkforward.py'
+      - 'tests/test_february_walkforward.py'
+      - '.github/workflows/test-february-walkforward.yml'
+permissions:
+  contents: read
+concurrency:
+  group: private-february-backtest
+  cancel-in-progress: false
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Unit tests for frozen time-boundary
+        run: python -m unittest discover -s tests -p 'test_february_walkforward.py' -v
+      - name: Install private Neon client
+        run: python -m pip install 'psycopg[binary]>=3,<4'
+      - name: Train only through January 30 and replay from February 2
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::DATABASE_URL unavailable; no actual backtest executed"
+            exit 1
+          fi
+          python february_walkforward.py --from-neon --cutoff 2026-01-30 --start 2026-02-02 --out private-february-walkforward.json
+          # Print only aggregate account-level metrics, no licensed stock row export.
+          python - <<'PY'
+          import json
+          r=json.load(open("private-february-walkforward.json"))
+          paper=r.get("paper_result",{})
+          curve=paper.get("equity",[])
+          print("status",r["status"],"rules_tested",r["rules_tested"],
+                "filled_events",len(paper.get("fills",[])),"ending_cash",paper.get("cash"),
+                "ending_equity",curve[-1]["total_equity"] if curve else None)
+          PY
+      - name: Ensure no privately licensed data persists in runner
+        if: always()
+        run: rm -f private-february-walkforward.json
