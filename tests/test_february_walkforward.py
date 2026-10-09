@@ -37,6 +37,8 @@ class FebruaryWalkforwardTest(unittest.TestCase):
                             h[i+2].date!=dates[j+2] or
                             h[i-rule["lookback"]].date!=dates[j-rule["lookback"]]):
                         continue
+                    if j<split and j+2>=split:
+                        continue  # No discovery target may cross into validation.
                     if rule_matches(h[:i+1],rule):
                         halves[0 if j<split else 1].append((h[i+2].open/h[i+1].open-1)*100)
             a,b=halves

@@ -3,7 +3,7 @@
 No actual brokerage orders. Uses private Neon when DATABASE_URL provided.
 """
 import argparse, csv, json, os, math
-from collections import defaultdict
+from collections import defaultdict, deque
 from statistics import mean
 from walkforward_backtest import Bar,load_bars,rule_matches
 
@@ -40,7 +40,7 @@ def frozen_train(data,cutoff,min_events=25):
     split=int(len(dates)*.7)
     segments=[defaultdict(list),defaultdict(list)]
     rules=candidate_rules()
-    historical=defaultdict(list)
+    historical=defaultdict(lambda: deque(maxlen=21))
     for idx,day in enumerate(dates):
         bars=data[day]
         for code,b in bars.items():
@@ -50,6 +50,8 @@ def frozen_train(data,cutoff,min_events=25):
         tomorrow=data[dates[idx+1]]
         after=data[dates[idx+2]]
         segment=0 if idx<split else 1
+        if segment==0 and idx+2>=split:
+            continue
         for code,b in bars.items():
             b1=tomorrow.get(code)
             b2=after.get(code)
@@ -110,7 +112,7 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
         raise ValueError("Start must equal the first market session after cutoff")
     unknown_days=set(corporate_actions)-set(dates)
     if unknown_days: raise ValueError("Corporate actions must map to market sessions")
-    hist=defaultdict(list)
+    hist=defaultdict(lambda: deque(maxlen=int(rule.get('lookback',5))+1))
     cash=float(initial);positions={};queue=[];ledger=[];daily=[]
     # A corporate event must not be assigned to holdings created after entitlement.
     # For dividends, entitlement_date (ex-date prior close) is mandatory.
@@ -263,9 +265,10 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
     # A stale quote is only an INDICATIVE scenario, never an actual final quote.
     # This exposes a usable estimate while preserving official final_equity=None.
     last_known_close={}
+    held_codes=set(positions)
     for observed_day in dates:
         for ticker,bar in data[observed_day].items():
-            if math.isfinite(bar.close) and bar.close>0:
+            if ticker in held_codes and math.isfinite(bar.close) and bar.close>0:
                 last_known_close[ticker]=(observed_day,bar.close)
     stale_marks=[]
     indicative_equity=cash

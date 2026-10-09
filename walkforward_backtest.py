@@ -31,7 +31,7 @@ def load_bars(root):
                           int(float(r["Vo"])),float(r["AdjC"]))
                 except (ValueError,TypeError):
                     continue
-                if b.date!=path.name[:10] or min(b.open,b.close,b.adj_close)<=0:
+                if (b.date!=path.name[:10] or not all(math.isfinite(value) and value>0 for value in (b.open,b.close,b.adj_close)) or b.volume<0):
                     continue
                 bydate[b.date][b.code]=b
     return dict(sorted(bydate.items()))
