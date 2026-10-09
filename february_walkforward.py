@@ -53,7 +53,7 @@ def frozen_train(data,cutoff,min_events=25):
         for code,b in bars.items():
             b1=tomorrow.get(code)
             b2=after.get(code)
-            if (b1 is None or b2 is None or b1.open<=0 or b1.volume<=0
+            if (b1 is None or b2 is None or b1.open<=0
                     or b2.open<=0):
                 continue
             h=historical[code]
