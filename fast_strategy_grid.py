@@ -66,7 +66,7 @@ def replay(data,days,features,buy,sell,from_date,to_date,initial=500000,per_posi
         date=days[i];bars=data[date]
         for side,code in sorted(queue,key=lambda v:0 if v[0]=="SELL" else 1):
             b=bars.get(code)
-            if b is None or b.open<=0 or b.volume<=0:continue
+            if b is None or not math.isfinite(b.open) or b.open<=0 or b.volume<=0:continue
             if side=="SELL":
                 p=positions.pop(code,None)
                 if p:
@@ -88,8 +88,12 @@ def replay(data,days,features,buy,sell,from_date,to_date,initial=500000,per_posi
         queue += [("BUY",code) for code in sorted(bars)
                   if code not in positions and code not in selling and buy_rule(features[date].get(code),buy)]
         # Use most recently observable close for marking held stock; missing price => unknown.
-        eq=cash+sum(p["qty"]*bars[code].close for code,p in positions.items() if code in bars)
-        if any(code not in bars for code in positions):eq=None
+        valid_closes = {code: bars[code].close for code in positions
+                        if code in bars and math.isfinite(bars[code].close) and bars[code].close > 0}
+        eq = cash + sum(p["qty"] * valid_closes[code] for code,p in positions.items()
+                        if code in valid_closes)
+        if len(valid_closes) != len(positions):
+            eq = None
         equity.append((date,eq))
     final=equity[-1][1]
     curve=[x for _,x in equity if x is not None]
