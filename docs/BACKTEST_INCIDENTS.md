@@ -76,3 +76,9 @@
 - Per-account realized/unrealized P&L reconciled with cash, net dividends, and final mark-to-market via explicit accounting identity assertion.
 - Dividend entitlement ledger only retains explicitly requested entitlement snapshots, not every held day (reduced memory).
 - Full historical results remain provisional; no claim of actual strategy profit.
+
+## 2026-10-10 学習の一括評価へ変更（Issue #5）
+- 従来は40種類のルールごとに、全銘柄と全履歴を再走査していた。改修後は日付順に株価を1回走査し、観測済み指標を40ルールへ適用する。
+- 最終検証期間の価格を学習に入れず、欠損営業日を除外する。
+- 独立した遅い基準実装との候補順位・成績・対象件数の一致テストを追加。
+- 一括テストが成功しても実データ全件の完走・収益確認を意味しない。Issue #2〜#7は未解決。

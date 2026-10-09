@@ -14,6 +14,38 @@ class FebruaryWalkforwardTest(unittest.TestCase):
             self.data[d]={"11110":bar(d,100+i*.4),
                           "22220":bar(d,200+i*.1,code="22220")}
         self.cutoff=sorted(self.data)[145];self.start=sorted(self.data)[146]
+    def test_one_pass_training_matches_independent_slow_reference(self):
+        from statistics import mean
+        from collections import defaultdict
+        from february_walkforward import candidate_rules
+        from walkforward_backtest import rule_matches
+        dates=[d for d in sorted(self.data) if d<=self.cutoff]
+        split=int(len(dates)*.7)
+        rules=candidate_rules()
+        series=defaultdict(list)
+        for day in dates:
+            for code,b in self.data[day].items():
+                series[code].append(b)
+        reference=[]
+        for rule in rules:
+            halves=[[],[]]
+            for h in series.values():
+                for i in range(rule["lookback"],len(h)-2):
+                    d=h[i].date
+                    j=dates.index(d)
+                    if (j+2>=len(dates) or h[i+1].date!=dates[j+1] or
+                            h[i+2].date!=dates[j+2] or
+                            h[i-rule["lookback"]].date!=dates[j-rule["lookback"]]):
+                        continue
+                    if rule_matches(h[:i+1],rule):
+                        halves[0 if j<split else 1].append((h[i+2].open/h[i+1].open-1)*100)
+            a,b=halves
+            if len(a)>=2 and len(b)>=8:
+                ma,mb=mean(a),mean(b)
+                reference.append((min(ma,mb),rule,len(a),len(b),ma,mb))
+        reference.sort(key=lambda p:p[0],reverse=True)
+        self.assertEqual(frozen_train(self.data,self.cutoff,min_events=2),reference)
+
     def test_trained_rule_is_independent_of_any_post_cutoff_data(self):
         before=frozen_train(self.data,self.cutoff,min_events=2)
         modified={d:dict(x) for d,x in self.data.items()}

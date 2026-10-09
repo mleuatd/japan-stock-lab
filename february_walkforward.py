@@ -30,48 +30,60 @@ def candidate_rules():
             for vol in (0,100000)]
 
 def frozen_train(data,cutoff,min_events=25):
+    """Single chronological scan of observed historical sessions for every rule.
+
+    Event membership matches the former per-rule/per-ticker scan. No
+    post-cutoff prices contribute to ranking; no sparse security lookback.
+    """
     dates=[d for d in sorted(data) if d<=cutoff]
     if len(dates)<120: raise ValueError("Insufficient pre-cutoff history")
-    day_index={d:i for i,d in enumerate(dates)}
-    # All model tuning is strictly prior to cutoff.
     split=int(len(dates)*.7)
-    next_session={day:dates[j+1] for j,day in enumerate(dates[:-1])}
-    features=defaultdict(list)
-    for day in dates:
-        for code,b in data[day].items(): features[code].append(b)
-    possibilities=[]
-    for rule in candidate_rules():
-        by_segment=[[],[]]
-        for bars in features.values():
-            for i in range(rule["lookback"],len(bars)-2):
-                d=bars[i].date
-                if d>cutoff:break
-                # Observe close on d; buy next OPEN; sell subsequent OPEN.
-                # Both future prices must also be <= cutoff for training.
-                # The entire lookback must have uninterrupted market sessions,
-                # not just the two future execution sessions.
-                if (bars[i+2].date>cutoff or bars[i+1].open<=0 or
-                    bars[i+1].date != next_session.get(d) or
-                    bars[i+2].date != next_session.get(bars[i+1].date) or
-                    day_index[d]-day_index.get(bars[i-rule["lookback"]].date,-100000)
-                       !=rule["lookback"]):
+    segments=[defaultdict(list),defaultdict(list)]
+    rules=candidate_rules()
+    historical=defaultdict(list)
+    for idx,day in enumerate(dates):
+        bars=data[day]
+        for code,b in bars.items():
+            historical[code].append((idx,b))
+        if idx+2>=len(dates):
+            continue
+        tomorrow=data[dates[idx+1]]
+        after=data[dates[idx+2]]
+        segment=0 if idx<split else 1
+        for code,b in bars.items():
+            b1=tomorrow.get(code)
+            b2=after.get(code)
+            if (b1 is None or b2 is None or b1.open<=0 or b1.volume<=0
+                    or b2.open<=0):
+                continue
+            h=historical[code]
+            # Previous day and n-day lookback must all be real market
+            # sessions, not merely the previous n observations for a ticker.
+            pct_by_lb={}
+            for lb in (3,5,10,20):
+                if len(h)<lb+1 or h[-1-lb][0]!=idx-lb:
                     continue
-                # Equivalent to rule_matches(bars[:i+1], rule) without
-                # allocating an ever-growing prefix for every candidate.
-                previous=bars[i-rule["lookback"]].adj_close
-                current=bars[i]
-                if (previous>0 and
-                    (current.adj_close/previous-1)*100 >= rule["min_return_pct"] and
-                    current.volume>=rule["min_volume"]):
-                    r=(bars[i+2].open/bars[i+1].open-1)*100
-                    by_segment[0 if d<=dates[split-1] else 1].append(r)
-        a,b=by_segment
-        if len(a)<min_events or len(b)<max(8,min_events//3):continue
-        # Require positive net-ish edge in both segments, conservative preference.
-        score=min(mean(a),mean(b))
-        possibilities.append((score,rule,len(a),len(b),mean(a),mean(b)))
-    possibilities.sort(key=lambda p:p[0],reverse=True)
-    return possibilities
+                previous=h[-1-lb][1].adj_close
+                if previous>0:
+                    pct_by_lb[lb]=(b.adj_close/previous-1)*100
+            if not pct_by_lb:
+                continue
+            result=(b2.open/b1.open-1)*100
+            for rule_idx,rule in enumerate(rules):
+                lb=rule["lookback"]
+                if (lb in pct_by_lb and pct_by_lb[lb]>=rule["min_return_pct"]
+                        and b.volume>=rule["min_volume"]):
+                    segments[segment][rule_idx].append(result)
+    eligible=[]
+    for idx,rule in enumerate(rules):
+        a=segments[0][idx]
+        b=segments[1][idx]
+        if len(a)<min_events or len(b)<max(8,min_events//3):
+            continue
+        ma,mb=mean(a),mean(b)
+        eligible.append((min(ma,mb),rule,len(a),len(b),ma,mb))
+    eligible.sort(key=lambda p:p[0],reverse=True)
+    return eligible
 
 def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation=100000,hold_days=5,fee_rate=.001,corporate_actions=None,slippage_rate=0.0,tax_rate=0.0):
     """Long-only historical paper account. Corporate events must be supplied explicitly.
