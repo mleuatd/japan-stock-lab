@@ -102,10 +102,6 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
     if not all(v is None or (isinstance(v,(int,float)) and 0 < v < float("inf"))
                for v in (stop_loss_pct,take_profit_pct,trailing_stop_pct)):
         raise ValueError("Exit percentage thresholds must be positive and finite")
-    if not (initial > 0 and isinstance(lot,int) and lot > 0 and allocation > 0
-            and isinstance(hold_days,int) and hold_days > 0
-            and 0 <= fee_rate < 1 and 0 <= slippage_rate < 1 and 0 <= tax_rate < 1):
-        raise ValueError("Invalid long-only paper-account parameters")
     corporate_actions=corporate_actions or {}
     dates=sorted(data)
     if cutoff not in dates: raise ValueError("Cutoff trading session missing")
@@ -135,14 +131,14 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                 ratio=event["split_ratio"]
                 if not (isinstance(ratio,(int,float)) and 0 < ratio < float("inf")):
                     raise ValueError("Invalid split ratio")
-                if pos is None: continue
-                new_qty=pos["qty"]*ratio
-                if abs(new_qty-round(new_qty))>1e-8:
-                    raise ValueError("Fractional share cash-out requires an explicit event")
-                pos["qty"]=int(round(new_qty))
-                pos["entry_price"]/=ratio
-                pos["peak_close"]/=ratio
-                ledger.append({"date":day,"code":code,"side":"ACTION","status":"SPLIT","ratio":ratio,"qty":pos["qty"]})
+                if pos is not None:
+                    new_qty=pos["qty"]*ratio
+                    if abs(new_qty-round(new_qty))>1e-8:
+                        raise ValueError("Fractional share cash-out requires an explicit event")
+                    pos["qty"]=int(round(new_qty))
+                    pos["entry_price"]/=ratio
+                    pos["peak_close"]/=ratio
+                    ledger.append({"date":day,"code":code,"side":"ACTION","status":"SPLIT","ratio":ratio,"qty":pos["qty"]})
             if "cash_dividend_per_share" in event:
                 entitlement=event.get("entitlement_date")
                 if entitlement is None or entitlement >= day or entitlement not in dates:
@@ -230,7 +226,8 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                 continue
             history=hist[code]
             # Never treat sparse per-security rows as consecutive sessions.
-            if n < lookback or len(history) < lookback+1 or history[-1-lookback].date != dates[n-lookback]:
+            if (n < lookback or len(history) < lookback+1
+                    or history[-1-lookback].date != dates[n-lookback]):
                 continue
             if not rule_matches(history,rule):
                 continue

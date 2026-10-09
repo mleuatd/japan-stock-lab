@@ -107,6 +107,28 @@ class CorporateAccountingTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 replay(more,self.rule,cutoff=self.cutoff,start=self.start,**kwargs)
 
+    def test_split_plus_dividend_after_sale_still_pays_entitled_holder(self):
+        # First replay open buys, final day open sells. Split occurs when
+        # no position remains at dividend *payment* time in real account.
+        payment=self.days[121]
+        event={"split_ratio":2,"cash_dividend_per_share":10,
+               "entitlement_date":self.days[120]}
+        res=replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
+                   allocation=10000,hold_days=1,fee_rate=0,
+                   corporate_actions={payment:{"11110":event}})
+        self.assertEqual(res["known_net_dividends"],1000)
+
+    def test_trailing_stop_runs_on_close_and_queues_for_next_open(self):
+        # Closing quote falls from previously established high, but is
+        # never treated as the next opening execution price.
+        day=self.days[121]
+        self.data[day]["11110"]=bar(day,"11110",100,94)
+        res=replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
+                   allocation=12000,hold_days=99,fee_rate=0,trailing_stop_pct=5)
+        sells=[e for e in res["fills"] if e["side"]=="SELL"]
+        self.assertFalse(sells)
+        self.assertEqual(res["unfilled_after_final_session"][0]["reason"],"TRAILING_STOP")
+
     def test_split_preserves_cost_basis_and_no_negative_cash(self):
         # Existing January signal opens a 100-share position on the first test day.
         split_day=self.days[121]
