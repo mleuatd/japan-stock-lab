@@ -196,7 +196,7 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                     positions[code]={"qty":qty,"cost":spent,"index":n,
                                      "entry_price":execution_price,
                                      "peak_close":execution_price}
-                    ledger.append({"date":day,"code":code,"side":"BUY","qty":qty,"price":round(execution_price,4)})
+                    ledger.append({"date":day,"code":code,"side":"BUY","qty":qty,"price":round(execution_price,4),"total_debit":spent})
         queue=pending_sell_retries
         for code,b in bars.items():hist[code].append(b)
         for code,pos in positions.items():
