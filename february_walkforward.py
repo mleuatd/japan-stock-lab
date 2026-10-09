@@ -85,7 +85,7 @@ def frozen_train(data,cutoff,min_events=25):
     eligible.sort(key=lambda p:p[0],reverse=True)
     return eligible
 
-def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation=100000,hold_days=5,fee_rate=.001,corporate_actions=None,slippage_rate=0.0,tax_rate=0.0):
+def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation=100000,hold_days=5,fee_rate=.001,corporate_actions=None,slippage_rate=0.0,tax_rate=0.0,max_positions=5,stop_loss_pct=None,take_profit_pct=None,trailing_stop_pct=None):
     """Long-only historical paper account. Corporate events must be supplied explicitly.
 
     corporate_actions: {date: {code: {"split_ratio": positive number,
@@ -94,6 +94,14 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
     Dividend cash is credited on the supplied *payment* date, not ex-date.
     Missing events are not inferred from adjustment factors. Report is provisional.
     """
+    if not (initial > 0 and isinstance(lot,int) and lot > 0 and allocation > 0
+            and isinstance(hold_days,int) and hold_days > 0
+            and isinstance(max_positions,int) and max_positions > 0
+            and 0 <= fee_rate < 1 and 0 <= slippage_rate < 1 and 0 <= tax_rate < 1):
+        raise ValueError("Invalid long-only paper-account parameters")
+    if not all(v is None or (isinstance(v,(int,float)) and 0 < v < float("inf"))
+               for v in (stop_loss_pct,take_profit_pct,trailing_stop_pct)):
+        raise ValueError("Exit percentage thresholds must be positive and finite")
     if not (initial > 0 and isinstance(lot,int) and lot > 0 and allocation > 0
             and isinstance(hold_days,int) and hold_days > 0
             and 0 <= fee_rate < 1 and 0 <= slippage_rate < 1 and 0 <= tax_rate < 1):
@@ -132,6 +140,8 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                 if abs(new_qty-round(new_qty))>1e-8:
                     raise ValueError("Fractional share cash-out requires an explicit event")
                 pos["qty"]=int(round(new_qty))
+                pos["entry_price"]/=ratio
+                pos["peak_close"]/=ratio
                 ledger.append({"date":day,"code":code,"side":"ACTION","status":"SPLIT","ratio":ratio,"qty":pos["qty"]})
             if "cash_dividend_per_share" in event:
                 entitlement=event.get("entitlement_date")
@@ -167,9 +177,10 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                     realized_pnl+=received-pos["cost"]
                     del positions[code]
                     ledger.append({"date":day,"code":code,"side":"SELL","qty":pos["qty"],"price":round(execution_price,4),
+                                   "signal_reason":order.get("reason","UNKNOWN"),
                                    "tax":round(tax,2),"realized_pnl":round(received-pos["cost"],2)})
                 else:
-                    if code in positions:continue
+                    if code in positions or len(positions)>=max_positions:continue
                     limit=min(cash,allocation)
                     execution_price=b.open*(1+slippage_rate)
                     qty=int(limit/(execution_price*(1+fee_rate))//lot)*lot
@@ -177,7 +188,9 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                     spent=qty*execution_price*(1+fee_rate)
                     if spent > cash+1e-8: raise AssertionError("Insufficient cash")
                     cash-=spent
-                    positions[code]={"qty":qty,"cost":spent,"index":n}
+                    positions[code]={"qty":qty,"cost":spent,"index":n,
+                                     "entry_price":execution_price,
+                                     "peak_close":execution_price}
                     ledger.append({"date":day,"code":code,"side":"BUY","qty":qty,"price":round(execution_price,4)})
         queue=[]
         for code,b in bars.items():hist[code].append(b)
@@ -188,8 +201,26 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
         # Decisions at CLOSE, after that session has become observable.
         exiting=set()
         for code,pos in positions.items():
-            if n-pos["index"] >= hold_days-1:
-                queue.append({"side":"SELL","code":code});exiting.add(code)
+            observed=bars.get(code)
+            if observed is None or observed.close<=0:
+                # Unknown quote cannot trigger a paper exit using a future price.
+                continue
+            entry=pos["entry_price"]
+            peak=pos["peak_close"]
+            close=observed.close
+            pos["peak_close"]=max(peak,close)
+            reason=None
+            if n-pos["index"]>=hold_days-1:
+                reason="MAX_HOLD"
+            elif stop_loss_pct is not None and close<=entry*(1-stop_loss_pct/100):
+                reason="STOP_LOSS"
+            elif take_profit_pct is not None and close>=entry*(1+take_profit_pct/100):
+                reason="TAKE_PROFIT"
+            elif trailing_stop_pct is not None and close<=pos["peak_close"]*(1-trailing_stop_pct/100):
+                reason="TRAILING_STOP"
+            if reason is not None:
+                queue.append({"side":"SELL","code":code,"reason":reason})
+                exiting.add(code)
         # Prioritize the strongest observable signal, not alphabetic ticker order.
         # Never inspect next-session prices while ranking today's candidates.
         lookback=int(rule.get("lookback",5))
@@ -210,7 +241,8 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
         for code in candidates[:10]:
             queue.append({"side":"BUY","code":code})
         if day>=start:
-            if cash < -0.0001 or any(x["qty"]<=0 for x in positions.values()):
+            if (cash < -0.0001 or any(x["qty"]<=0 for x in positions.values())
+                    or len(positions)>max_positions):
                 raise AssertionError("Non-cash or short position")
             if all(code in bars and bars[code].close > 0 for code in positions):
                 value=cash+sum(pos["qty"]*bars[code].close for code,pos in positions.items())

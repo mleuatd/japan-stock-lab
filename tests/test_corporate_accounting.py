@@ -78,6 +78,35 @@ class CorporateAccountingTests(unittest.TestCase):
                    allocation=10000,hold_days=90,fee_rate=0,
                    corporate_actions={day:{"11110":{"split_ratio":0}}})
 
+    def test_take_profit_exit_is_at_next_open_not_signal_close(self):
+        day=self.days[121]
+        self.data[day]["11110"]=bar(day,"11110",110,130)
+        # The exit is queued on the final close, never filled on this day.
+        r=replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
+                 allocation=12000,hold_days=99,fee_rate=0,take_profit_pct=10)
+        self.assertEqual(len([f for f in r["fills"] if f["side"]=="SELL"]),0)
+        self.assertTrue(any(o["reason"]=="TAKE_PROFIT" for o in r["unfilled_after_final_session"]))
+
+    def test_stop_loss_signal_is_after_close(self):
+        day=self.days[121]
+        self.data[day]["11110"]=bar(day,"11110",100,90)
+        r=replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
+                 allocation=12000,hold_days=99,fee_rate=0,stop_loss_pct=5)
+        self.assertTrue(any(o["reason"]=="STOP_LOSS" for o in r["unfilled_after_final_session"]))
+
+    def test_position_cap_and_threshold_validation(self):
+        more={}
+        for d,rows in self.data.items():
+            more[d]={**rows,"22220":bar(d,"22220",100)}
+        r=replay(more,self.rule,cutoff=self.cutoff,start=self.start,
+                 allocation=12000,fee_rate=0,hold_days=99,max_positions=1)
+        self.assertLessEqual(len(r["held"]),1)
+        for kwargs in ({"max_positions":0},{"stop_loss_pct":-1},
+                       {"take_profit_pct":float("inf")},
+                       {"trailing_stop_pct":0}):
+            with self.assertRaises(ValueError):
+                replay(more,self.rule,cutoff=self.cutoff,start=self.start,**kwargs)
+
     def test_split_preserves_cost_basis_and_no_negative_cash(self):
         # Existing January signal opens a 100-share position on the first test day.
         split_day=self.days[121]
