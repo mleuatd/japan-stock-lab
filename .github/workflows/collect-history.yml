@@ -12,7 +12,7 @@ on:
       batch_days:
         description: Days to request this run
         required: false
-        default: '80'
+        default: '600'
       start:
         description: Optional start date YYYY-MM-DD
         required: false
@@ -29,6 +29,7 @@ concurrency:
 jobs:
   collect:
     runs-on: ubuntu-latest
+    timeout-minutes: 330
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -60,7 +61,7 @@ jobs:
           JQUANTS_API_KEY: ${{ secrets.JQUANTS_API_KEY }}
           START: ${{ inputs.start }}
           END: ${{ inputs.end }}
-          DAYS: ${{ inputs.batch_days || '80' }}
+          DAYS: ${{ inputs.batch_days || '600' }}
         run: |
           args=(--days "$DAYS")
           if [ -n "$START" ]; then args+=(--start "$START"); fi
@@ -68,6 +69,24 @@ jobs:
           python export.py "${args[@]}"
       - name: Validate saved CSV integrity
         run: python validate_archive.py --root archive/daily
+      - name: Install PostgreSQL client
+        run: python -m pip install 'psycopg[binary]>=3,<4'
+      - name: Import all currently collected days to Neon in bounded increments
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::DATABASE_URL unavailable: prices collected but import cannot run"
+            exit 1
+          fi
+          # Source coverage is at most two years (~524 weekdays), so 30x20 is sufficient.
+          # Each day commits independently; existing imports are skipped.
+          # neon_import.py stops before any new day when DB >= 700MB.
+          for batch in $(seq 1 30); do
+            echo "Incremental Neon import batch $batch of 30"
+            python neon_import.py --root archive/daily --max-days 20 --apply
+          done
       - name: Back up validated days into private repository (if configured)
         env:
           PRIVATE_ARCHIVE_REPO: ${{ vars.PRIVATE_ARCHIVE_REPO }}
