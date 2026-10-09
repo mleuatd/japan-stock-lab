@@ -61,7 +61,9 @@ def simulate(data,rule,initial_cash=500_000,allocation=0.1,fee_pct=0.0,hold_days
     equity=[]
     for index,date in enumerate(dates):
         current=data[date]
-        # Orders from prior close execute at today's OPEN (or expire).
+        # Sell requests survive a missing or suspended opening session.
+        # Buy requests expire rather than executing on a later, unintended day.
+        retry_sells=[]
         # Existing holdings are sold first to free cash, then long-only buys are evaluated.
         for o in sorted(orders,key=lambda item: 0 if item["side"]=="SELL" else 1):
             if o["side"] not in ("BUY","SELL"):
@@ -69,6 +71,8 @@ def simulate(data,rule,initial_cash=500_000,allocation=0.1,fee_pct=0.0,hold_days
             b=current.get(o["code"])
             if not b or not math.isfinite(b.open) or b.open<=0 or b.volume<=0:
                 events.append(dict(date=date,code=o["code"],side=o["side"],action="SKIP_NO_OPEN"))
+                if o["side"]=="SELL" and o["code"] in positions:
+                    retry_sells.append(o)
                 continue
             code=o["code"]
             if o["side"]=="BUY":
@@ -89,13 +93,15 @@ def simulate(data,rule,initial_cash=500_000,allocation=0.1,fee_pct=0.0,hold_days
                 received=pos["qty"]*b.open*(1-fee_pct)
                 cash+=received
                 events.append(dict(date=date,code=code,side="SELL",action="FILLED",qty=pos["qty"],price=b.open,pnl=round(received-pos["cost"],2),cash=round(cash,2)))
-        orders=[]
+        orders=retry_sells
         # All current-day prices become known only after today's CLOSE.
         for code,b in current.items():
             history[code].append(b)
         # Exit scheduling and fresh buy signals are decisions at today's CLOSE.
-        exits=set()
+        exits={o["code"] for o in retry_sells}
         for code,pos in positions.items():
+            if code in exits:
+                continue
             if index-pos["index"]>=hold_days-1:
                 orders.append({"side":"SELL","code":code})
                 exits.add(code)
