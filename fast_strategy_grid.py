@@ -121,7 +121,9 @@ def grid(data,train_to="2026-01-30",test_from="2026-02-02"):
     ranked=sorted(rows,key=lambda r:r["score"],reverse=True)
     winner=next((r for r in ranked if r["score"]>0),None)
     test=replay(data,days,feats,winner["buy"],winner["sell"],test_from,days[-1]) if winner else None
-    return {"train_last_date":train_to,"test_first_date":test_from,"data_last_date":days[-1],
+    return {"validation_status":"PROVISIONAL_UNVERIFIED",
+            "blocking_issues":[2,3,4,5,6],
+            "train_last_date":train_to,"test_first_date":test_from,"data_last_date":days[-1],
             "strategies_evaluated":len(BUY)*len(SELL),"training_eligible":len(ranked),
             "selected_pre_test":{k:winner[k] for k in ("buy","sell","score")} if winner else None,
             "held_out_result":test,"training_top5":[{"buy":r["buy"],"sell":r["sell"],"score":round(r["score"],2)} for r in ranked[:5]],
@@ -134,6 +136,7 @@ def main():
     data=load_private_neon() if args.from_neon else load_bars(args.root)
     r=grid(data)
     with open(args.out,"w",encoding="utf8") as f:json.dump(r,f,ensure_ascii=False,indent=2)
-    print(json.dumps({"evaluated":r["strategies_evaluated"],"selected":r["selected_pre_test"],
+    print(json.dumps({"validation_status":r["validation_status"],"blocking_issues":r["blocking_issues"],
+                      "evaluated":r["strategies_evaluated"],"selected":r["selected_pre_test"],
                       "held_out_result":r["held_out_result"]},ensure_ascii=False))
 if __name__=="__main__":main()
