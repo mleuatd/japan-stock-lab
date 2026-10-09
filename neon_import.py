@@ -10,6 +10,8 @@ import argparse
 import csv
 import gzip
 import hashlib
+import json
+import datetime as dt
 import os
 from pathlib import Path
 from decimal import Decimal, InvalidOperation
@@ -51,6 +53,17 @@ def decode_day(path):
         raise ValueError(f"empty day: {path}")
     return date, rows
 
+def source_fetched_at(path):
+    """Only use an actual API fetch timestamp, never a guessed import/file mtime."""
+    sidecar = path.with_name(path.name + ".fetch.json")
+    if not sidecar.exists():
+        return None
+    info = json.loads(sidecar.read_text(encoding="utf-8"))
+    stamp = dt.datetime.fromisoformat(info["fetched_at"].replace("Z", "+00:00"))
+    if stamp.tzinfo is None:
+        raise ValueError(f"fetch timestamp missing timezone: {sidecar}")
+    return stamp
+
 def checksum(path):
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -86,6 +99,7 @@ def main():
                 if statement.strip():
                     con.execute(statement)
         imported=skipped=0
+        batch_id=None
         for path in paths:
             if imported >= args.max_days:
                 print("Batch limit reached; resume next run", flush=True)
@@ -101,22 +115,31 @@ def main():
                 continue
             day,rows=decode_day(path)
             digest=checksum(path)
+            fetched_at=source_fetched_at(path)
             with con.transaction():
                 with con.cursor() as cur:
+                    if batch_id is None:
+                        batch_id=cur.execute("INSERT INTO ingest_batch DEFAULT VALUES RETURNING id").fetchone()[0]
                     cur.executemany(INSERT,rows)
                     # Mark complete only after every row passes insertion.
                     actual=cur.execute("SELECT COUNT(*) FROM daily_bar WHERE trading_date=%s",(day,)).fetchone()[0]
                     if actual != len(rows):
                         raise ValueError(f"row count differs for {day}: {actual} != {len(rows)}")
                     cur.execute("""INSERT INTO ingest_day
-                        (trading_date,state,rows_count,payload_checksum,source)
-                        VALUES (%s,'complete',%s,%s,'jquants-csv-gzip')
+                        (trading_date,state,rows_count,payload_checksum,source,batch_id,source_fetched_at)
+                        VALUES (%s,'complete',%s,%s,'jquants-csv-gzip',%s,%s)
                         ON CONFLICT (trading_date) DO UPDATE SET
                         state=EXCLUDED.state,rows_count=EXCLUDED.rows_count,
                         payload_checksum=EXCLUDED.payload_checksum,
-                        source=EXCLUDED.source,collected_at=now()""",(day,len(rows),digest))
+                        source=EXCLUDED.source,collected_at=now(),
+                        batch_id=EXCLUDED.batch_id,source_fetched_at=EXCLUDED.source_fetched_at""",
+                        (day,len(rows),digest,batch_id,fetched_at))
+                    cur.execute("UPDATE ingest_batch SET imported_days=imported_days+1, imported_rows=imported_rows+%s WHERE id=%s",(len(rows),batch_id))
             imported+=1
             print(f"IMPORTED {day} {len(rows)}",flush=True)
+        if batch_id is not None:
+            with con.transaction():
+                con.execute("UPDATE ingest_batch SET finished_at=now() WHERE id=%s", (batch_id,))
         print(f"Complete: {imported} new days; {skipped} previously complete days")
 if __name__=="__main__":
     main()
