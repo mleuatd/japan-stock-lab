@@ -69,3 +69,10 @@
 - Dividend payout requires explicit entitlement_date earlier than payment date; credit only if same security held at entitlement-date close. No ex-date metadata => fail closed.
 - Reject lookback signals based on securities missing an intervening market session.
 - Still PROVISIONAL_UNVERIFIED: corporate action ledger and actual dividend payment data unavailable; cash and taxes are simplified.
+
+## 2026-10-10 一括整合性修正 (Issue #2, #3)
+- Frozen training now validates the complete lookback history is contiguous in market sessions, not only the next-two trade sessions.
+- Invalid split factors fail early even when no position happens to be held. Division/rounding still needs external event validation.
+- Per-account realized/unrealized P&L reconciled with cash, net dividends, and final mark-to-market via explicit accounting identity assertion.
+- Dividend entitlement ledger only retains explicitly requested entitlement snapshots, not every held day (reduced memory).
+- Full historical results remain provisional; no claim of actual strategy profit.

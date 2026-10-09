@@ -61,6 +61,23 @@ class CorporateAccountingTests(unittest.TestCase):
                                                       "entitlement_date":self.days[120]}}})
         self.assertEqual(r["known_net_dividends"],1000)
 
+    def test_unrealized_profit_reconciles_to_cash_and_equity(self):
+        day=self.days[-1]
+        self.data[day]["11110"]=bar(day,"11110",110,110)
+        result=replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
+                      allocation=10000,hold_days=90,fee_rate=0)
+        self.assertEqual(result["final_equity"],501000)
+        self.assertEqual(result["unrealized_pnl"],1000)
+        self.assertEqual(result["cash"],490000)
+        self.assertEqual(result["realized_pnl"],0)
+
+    def test_invalid_split_without_holding_is_rejected(self):
+        day=self.days[120]
+        with self.assertRaises(ValueError):
+            replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
+                   allocation=10000,hold_days=90,fee_rate=0,
+                   corporate_actions={day:{"11110":{"split_ratio":0}}})
+
     def test_split_preserves_cost_basis_and_no_negative_cash(self):
         # Existing January signal opens a 100-share position on the first test day.
         split_day=self.days[121]
