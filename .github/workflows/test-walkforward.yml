@@ -7,6 +7,8 @@ on:
       - 'nightly_paper_plan.py'
       - 'discover_patterns.py'
       - 'fast_strategy_grid.py'
+      - 'february_walkforward.py'
+      - 'tests/test_february_priority.py'
       - 'tests/test_fast_strategy_grid.py'
       - 'tests/test_accuracy_regression.py'
       - 'tests/test_walkforward_backtest.py'
@@ -25,4 +27,4 @@ jobs:
         with:
           python-version: '3.12'
       - name: Test lookahead, next-session execution, missing prices, fees
-        run: python -m unittest discover -s tests -p 'test_*backtest.py' -v && python -m unittest discover -s tests -p 'test_nightly_paper_plan.py' -v && python -m unittest discover -s tests -p 'test_discover_patterns.py' -v && python -m unittest discover -s tests -p 'test_fast_strategy_grid.py' -v && python -m unittest discover -s tests -p 'test_accuracy_regression.py' -v
+        run: python -m unittest discover -s tests -p 'test_*backtest.py' -v && python -m unittest discover -s tests -p 'test_nightly_paper_plan.py' -v && python -m unittest discover -s tests -p 'test_discover_patterns.py' -v && python -m unittest discover -s tests -p 'test_fast_strategy_grid.py' -v && python -m unittest discover -s tests -p 'test_accuracy_regression.py' -v && python -m unittest discover -s tests -p 'test_february_priority.py' -v && python -m unittest discover -s tests -p 'test_february_walkforward.py' -v
