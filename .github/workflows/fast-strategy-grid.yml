@@ -1,0 +1,36 @@
+name: Fast buy/sell historical grid
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'fast_strategy_grid.py'
+      - 'tests/test_fast_strategy_grid.py'
+      - '.github/workflows/fast-strategy-grid.yml'
+permissions:
+  contents: read
+concurrency:
+  group: fast-private-strategy-grid
+  cancel-in-progress: false
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Unit tests
+        run: python -m unittest discover -s tests -p 'test_fast_strategy_grid.py' -v
+      - name: Install private Neon driver
+        run: python -m pip install 'psycopg[binary]>=3,<4'
+      - name: Run fixed-training buy/sell comparison
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "::error::DATABASE_URL unavailable"; exit 1; fi
+          python fast_strategy_grid.py --from-neon --out private-fast-grid.json
+      - name: Remove private artifacts
+        if: always()
+        run: rm -f private-fast-grid.json
