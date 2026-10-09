@@ -53,6 +53,26 @@ class CorporateAccountingTests(unittest.TestCase):
         self.assertTrue(diag["final_equity_available"])
         self.assertEqual(diag["unpriced_days"],0)
 
+    def test_missing_quote_yields_labelled_stale_estimate_but_not_official_equity(self):
+        final=self.days[-1]
+        self.data[final].pop("11110")
+        self.data[final]["22220"]=bar(final,"22220",80)
+        result=replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
+                      allocation=10000,hold_days=99,fee_rate=0)
+        self.assertIsNone(result["final_equity"])
+        info=result["valuation_diagnostics"]
+        self.assertEqual(info["indicative_last_known_equity"],500000)
+        self.assertEqual(info["indicative_stale_positions"],1)
+        self.assertGreaterEqual(info["indicative_oldest_quote_calendar_days"],1)
+        self.assertIn("UNVERIFIED",info["indicative_valuation_method"])
+
+    def test_exact_last_close_equals_indicative_when_no_staleness(self):
+        result=replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
+                      allocation=10000,hold_days=99,fee_rate=0)
+        self.assertEqual(result["final_equity"],
+                         result["valuation_diagnostics"]["indicative_last_known_equity"])
+        self.assertEqual(result["valuation_diagnostics"]["indicative_stale_positions"],0)
+
     def test_accounting_summary_and_missing_corporate_date(self):
         r=replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
                  allocation=10000,hold_days=90,fee_rate=0)
