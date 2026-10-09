@@ -6,6 +6,7 @@ import argparse, csv, json, os, math
 from collections import defaultdict, deque
 from statistics import mean
 from walkforward_backtest import Bar,load_bars,rule_matches
+from paper_ledger_accounting import reconcile
 
 CUTOFF="2026-01-30"
 START="2026-02-02"
@@ -156,7 +157,7 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                 net=gross*(1-tax_rate)
                 cash+=net
                 known_dividends+=net
-                ledger.append({"date":day,"code":code,"side":"ACTION","status":"DIVIDEND","gross":round(gross,2),"net":round(net,2)})
+                ledger.append({"date":day,"code":code,"side":"ACTION","status":"DIVIDEND","gross":round(gross,2),"net":round(net,2),"net_credit":net})
         # At the first replay open: execute Jan30-close orders from Jan30 signal.
         pending_sell_retries=[]
         if day>cutoff and day>=start:
