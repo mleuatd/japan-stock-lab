@@ -22,6 +22,8 @@ on:
       - 'tests/test_neon_data_quality.py'
       - 'final_session_preflight.py'
       - 'tests/test_final_session_preflight.py'
+      - 'backtest_result_gate.py'
+      - 'tests/test_backtest_result_gate.py'
       - 'tests/test_suspended_sell.py'
   pull_request:
     branches: [main]
