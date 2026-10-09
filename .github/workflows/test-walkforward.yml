@@ -18,6 +18,8 @@ on:
       - 'tests/test_nightly_paper_plan.py'
       - 'tests/test_discover_patterns.py'
       - '.github/workflows/test-walkforward.yml'
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
