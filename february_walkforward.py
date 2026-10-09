@@ -304,7 +304,9 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                     positions[code]["cost"]) for code in positions) if final_equity is not None else None
     if final_equity is not None and abs(final_equity-(initial+realized_pnl+known_dividends+unrealized))>0.03:
         raise AssertionError("Portfolio accounting identity failed")
+    cash_and_shares_check=reconcile(initial,ledger,positions,cash)
     return {"cash":round(cash,2),"held":positions,"fills":ledger,"equity":daily,
+            "ledger_audit":cash_and_shares_check,
             "final_equity":known_values[-1] if known_values else None,
             "realized_pnl":round(realized_pnl,2),
             "unrealized_pnl":round(unrealized,2) if unrealized is not None else None,
