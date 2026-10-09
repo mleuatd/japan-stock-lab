@@ -50,6 +50,8 @@ def frozen_train(data,cutoff,min_events=25):
         tomorrow=data[dates[idx+1]]
         after=data[dates[idx+2]]
         segment=0 if idx<split else 1
+        if segment==0 and idx+2>=split:
+            continue
         for code,b in bars.items():
             b1=tomorrow.get(code)
             b2=after.get(code)
