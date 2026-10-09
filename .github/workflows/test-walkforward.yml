@@ -9,6 +9,7 @@ on:
       - 'fast_strategy_grid.py'
       - 'february_walkforward.py'
       - 'tests/test_february_priority.py'
+      - 'tests/test_february_walkforward.py'
       - 'tests/test_frozen_train_equivalence.py'
       - 'tests/test_fast_strategy_grid.py'
       - 'tests/test_accuracy_regression.py'
