@@ -20,6 +20,7 @@ on:
       - '.github/workflows/test-walkforward.yml'
       - 'neon_data_quality.py'
       - 'tests/test_neon_data_quality.py'
+      - 'tests/test_suspended_sell.py'
   pull_request:
     branches: [main]
   workflow_dispatch:
