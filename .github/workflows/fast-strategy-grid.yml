@@ -1,13 +1,6 @@
 name: Fast buy/sell historical grid
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'fast_strategy_grid.py'
-      - 'tests/test_fast_strategy_grid.py'
-      - 'tests/test_accuracy_regression.py'
-      - '.github/workflows/fast-strategy-grid.yml'
 permissions:
   contents: read
 concurrency:
