@@ -1,0 +1,38 @@
+name: P0 Held-Portfolio Source Audit
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'p0_portfolio_audit.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: private-february-backtest
+  cancel-in-progress: false
+jobs:
+  check-actual-holdings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test portfolio-ledger reconciliation and no-lookahead regression
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Install private PostgreSQL client
+        run: python -m pip install 'psycopg[binary]>=3,<4'
+      - name: Fixed-rule replay and held-position evidence checks
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          test -n "$DATABASE_URL" || { echo "::error::Missing private DATABASE_URL"; exit 1; }
+          python february_walkforward.py --from-neon --cutoff 2026-01-30 --start 2026-02-02 --fixed-rule-json '{"lookback":3,"min_return_pct":-10,"min_volume":0}' --out private-p0-audit.json
+          python p0_portfolio_audit.py private-p0-audit.json
+      - name: Official portfolio valuation gate (failure means UNKNOWN; no false profit)
+        continue-on-error: true
+        run: python backtest_result_gate.py private-p0-audit.json
+      - name: Remove private paper ledger
+        if: always()
+        run: rm -f private-p0-audit.json
