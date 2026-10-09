@@ -33,6 +33,21 @@ class FebruaryWalkforwardTest(unittest.TestCase):
         result=replay(self.data,{"lookback":3,"min_return_pct":0},
                       cutoff=self.cutoff,start=self.start,lot=100,allocation=30000,hold_days=999)
         self.assertGreaterEqual(result["equity"][-1]["total_equity"],result["cash"])
+    def test_missing_stock_sessions_are_not_fake_next_day_fills(self):
+        # One security trades only every other market day: its next row
+        # must not be mistaken for the next market session's opening.
+        modified={day:dict(rows) for day,rows in self.data.items()}
+        for index,day in enumerate(sorted(modified)):
+            if index % 2:
+                modified[day].pop("11110",None)
+        baseline=frozen_train(modified,self.cutoff,min_events=2)
+        # Every reported event for stock 11110 would require uninterrupted
+        # three-session presence, which does not exist in this dataset.
+        with_only_sparse={day:{"11110":rows["11110"]} if "11110" in rows
+                          else {"22220":self.data[day]["22220"]}
+                          for day,rows in modified.items()}
+        self.assertEqual(frozen_train(with_only_sparse,self.cutoff,min_events=2),[])
+        self.assertIsInstance(baseline,list)
     def test_no_pre_cutoff_data(self):
         with self.assertRaises(ValueError):
             frozen_train({"2026-01-30":{"11110":bar("2026-01-30",100)}},"2026-01-30")
