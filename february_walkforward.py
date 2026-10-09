@@ -156,11 +156,17 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                 known_dividends+=net
                 ledger.append({"date":day,"code":code,"side":"ACTION","status":"DIVIDEND","gross":round(gross,2),"net":round(net,2)})
         # At the first replay open: execute Jan30-close orders from Jan30 signal.
+        pending_sell_retries=[]
         if day>cutoff and day>=start:
             for order in sorted(queue,key=lambda o:0 if o["side"]=="SELL" else 1):
                 code=order["code"];b=bars.get(code)
                 if not b or b.open<=0 or b.volume<=0:
-                    ledger.append({"date":day,"code":code,"side":order["side"],"status":"NO_OPEN"});continue
+                    ledger.append({"date":day,"code":code,"side":order["side"],"status":"NO_OPEN"})
+                    # Do not silently cancel the liquidation request while held.
+                    # Retry at a later *observable* market open, not at a fake price.
+                    if order["side"]=="SELL" and code in positions:
+                        pending_sell_retries.append(order)
+                    continue
                 if order["side"]=="SELL":
                     if code not in positions:continue
                     pos=positions[code]
@@ -188,15 +194,16 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                                      "entry_price":execution_price,
                                      "peak_close":execution_price}
                     ledger.append({"date":day,"code":code,"side":"BUY","qty":qty,"price":round(execution_price,4)})
-        queue=[]
+        queue=pending_sell_retries
         for code,b in bars.items():hist[code].append(b)
         for code,pos in positions.items():
             if (code,day) in entitlement_dates:
                 dividend_entitled[(code,day)]=pos["qty"]
         if day<cutoff:continue
         # Decisions at CLOSE, after that session has become observable.
-        exiting=set()
+        exiting={order["code"] for order in pending_sell_retries}
         for code,pos in positions.items():
+            if code in exiting:continue
             observed=bars.get(code)
             if observed is None or observed.close<=0:
                 # Unknown quote cannot trigger a paper exit using a future price.
