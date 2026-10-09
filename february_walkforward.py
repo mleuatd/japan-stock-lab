@@ -68,7 +68,19 @@ def frozen_train(data,cutoff,min_events=25):
     possibilities.sort(key=lambda p:p[0],reverse=True)
     return possibilities
 
-def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation=100000,hold_days=5,fee_rate=.001):
+def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation=100000,hold_days=5,fee_rate=.001,corporate_actions=None,slippage_rate=0.0,tax_rate=0.0):
+    """Long-only historical paper account. Corporate events must be supplied explicitly.
+
+    corporate_actions: {date: {code: {"split_ratio": positive number,
+                     "cash_dividend_per_share": nonnegative number}}}.
+    The split event is applied before OPEN orders on the effective date.
+    Dividend cash is credited on the supplied *payment* date, not ex-date.
+    Missing events are not inferred from adjustment factors. Report is provisional.
+    """
+    if not (initial > 0 and lot > 0 and allocation > 0 and hold_days > 0
+            and 0 <= fee_rate < 1 and 0 <= slippage_rate < 1 and 0 <= tax_rate < 1):
+        raise ValueError("Invalid long-only paper-account parameters")
+    corporate_actions=corporate_actions or {}
     dates=sorted(data)
     if cutoff not in dates: raise ValueError("Cutoff trading session missing")
     if start<=cutoff: raise ValueError("Replay must start after training cutoff")
@@ -76,6 +88,28 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
     cash=float(initial);positions={};queue=[];ledger=[];daily=[]
     for n,day in enumerate(dates):
         bars=data[day]
+        # Apply only sourced and explicitly supplied corporate actions.
+        for code,event in corporate_actions.get(day,{}).items():
+            if code not in positions:
+                continue
+            pos=positions[code]
+            if "split_ratio" in event:
+                ratio=event["split_ratio"]
+                if not (isinstance(ratio,(int,float)) and 0 < ratio < float("inf")):
+                    raise ValueError("Invalid split ratio")
+                new_qty=pos["qty"]*ratio
+                if abs(new_qty-round(new_qty))>1e-8:
+                    raise ValueError("Fractional share cash-out requires an explicit event")
+                pos["qty"]=int(round(new_qty))
+                ledger.append({"date":day,"code":code,"side":"ACTION","status":"SPLIT","ratio":ratio,"qty":pos["qty"]})
+            if "cash_dividend_per_share" in event:
+                amount=event["cash_dividend_per_share"]
+                if not (isinstance(amount,(int,float)) and 0 <= amount < float("inf")):
+                    raise ValueError("Invalid dividend")
+                gross=pos["qty"]*amount
+                net=gross*(1-tax_rate)
+                cash+=net
+                ledger.append({"date":day,"code":code,"side":"ACTION","status":"DIVIDEND","gross":round(gross,2),"net":round(net,2)})
         # At the first replay open: execute Jan30-close orders from Jan30 signal.
         if day>cutoff and day>=start:
             for order in sorted(queue,key=lambda o:0 if o["side"]=="SELL" else 1):
@@ -84,18 +118,27 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                     ledger.append({"date":day,"code":code,"side":order["side"],"status":"NO_OPEN"});continue
                 if order["side"]=="SELL":
                     if code not in positions:continue
-                    pos=positions.pop(code);received=pos["qty"]*b.open*(1-fee_rate)
+                    pos=positions[code]
+                    execution_price=b.open*(1-slippage_rate)
+                    proceeds=pos["qty"]*execution_price*(1-fee_rate)
+                    gross_gain=proceeds-pos["cost"]
+                    tax=max(0,gross_gain)*tax_rate
+                    received=proceeds-tax
                     cash+=received
-                    ledger.append({"date":day,"code":code,"side":"SELL","qty":pos["qty"],"price":b.open,
-                                   "realized_pnl":round(received-pos["cost"],2)})
+                    del positions[code]
+                    ledger.append({"date":day,"code":code,"side":"SELL","qty":pos["qty"],"price":round(execution_price,4),
+                                   "tax":round(tax,2),"realized_pnl":round(received-pos["cost"],2)})
                 else:
                     if code in positions:continue
                     limit=min(cash,allocation)
-                    qty=int(limit/(b.open*(1+fee_rate))//lot)*lot
+                    execution_price=b.open*(1+slippage_rate)
+                    qty=int(limit/(execution_price*(1+fee_rate))//lot)*lot
                     if qty<lot:continue
-                    spent=qty*b.open*(1+fee_rate);cash-=spent
+                    spent=qty*execution_price*(1+fee_rate)
+                    if spent > cash+1e-8: raise AssertionError("Insufficient cash")
+                    cash-=spent
                     positions[code]={"qty":qty,"cost":spent,"index":n}
-                    ledger.append({"date":day,"code":code,"side":"BUY","qty":qty,"price":b.open})
+                    ledger.append({"date":day,"code":code,"side":"BUY","qty":qty,"price":round(execution_price,4)})
         queue=[]
         for code,b in bars.items():hist[code].append(b)
         if day<cutoff:continue
@@ -129,7 +172,9 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
             daily.append({"date":day,"cash":round(cash,2),"total_equity":round(value,2) if value is not None else None,
                           "holdings":len(positions)})
     return {"cash":round(cash,2),"held":positions,"fills":ledger,"equity":daily,
-            "unfilled_after_final_session":queue}
+            "unfilled_after_final_session":queue,
+            "validation_status":"PROVISIONAL_UNVERIFIED",
+            "accounting_note":"Corporate actions require complete dated external events; no automatic inference."}
 
 def experiment(data,cutoff=CUTOFF,start=START):
     candidates=frozen_train(data,cutoff)

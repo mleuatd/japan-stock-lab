@@ -11,12 +11,15 @@ on:
       - 'tests/test_february_priority.py'
       - 'tests/test_february_walkforward.py'
       - 'tests/test_frozen_train_equivalence.py'
+      - 'tests/test_corporate_accounting.py'
       - 'tests/test_fast_strategy_grid.py'
       - 'tests/test_accuracy_regression.py'
       - 'tests/test_walkforward_backtest.py'
       - 'tests/test_nightly_paper_plan.py'
       - 'tests/test_discover_patterns.py'
       - '.github/workflows/test-walkforward.yml'
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -29,4 +32,4 @@ jobs:
         with:
           python-version: '3.12'
       - name: Test lookahead, next-session execution, missing prices, fees
-        run: python -m unittest discover -s tests -p 'test_*backtest.py' -v && python -m unittest discover -s tests -p 'test_nightly_paper_plan.py' -v && python -m unittest discover -s tests -p 'test_discover_patterns.py' -v && python -m unittest discover -s tests -p 'test_fast_strategy_grid.py' -v && python -m unittest discover -s tests -p 'test_accuracy_regression.py' -v && python -m unittest discover -s tests -p 'test_february_priority.py' -v && python -m unittest discover -s tests -p 'test_february_walkforward.py' -v && python -m unittest discover -s tests -p 'test_frozen_train_equivalence.py' -v
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
