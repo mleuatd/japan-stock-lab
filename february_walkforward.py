@@ -183,7 +183,7 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                     del positions[code]
                     ledger.append({"date":day,"code":code,"side":"SELL","qty":pos["qty"],"price":round(execution_price,4),
                                    "signal_reason":order.get("reason","UNKNOWN"),
-                                   "tax":round(tax,2),"realized_pnl":round(received-pos["cost"],2)})
+                                   "tax":round(tax,2),"realized_pnl":round(received-pos["cost"],2),"net_credit":received})
                 else:
                     if code in positions or len(positions)>=max_positions:continue
                     limit=min(cash,allocation)
