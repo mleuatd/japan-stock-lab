@@ -31,3 +31,16 @@ CREATE TABLE IF NOT EXISTS backtest_run (
  created_at timestamptz NOT NULL DEFAULT now(),
  params jsonb NOT NULL DEFAULT '{}'::jsonb
 );
+
+-- Each new import execution that actually inserts days gets one batch identity.
+-- Historical API-fetch times are unknown and must never be backfilled with import times.
+CREATE TABLE IF NOT EXISTS ingest_batch (
+ id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+ started_at timestamptz NOT NULL DEFAULT now(),
+ finished_at timestamptz,
+ source text NOT NULL DEFAULT 'jquants-csv-gzip',
+ imported_days integer NOT NULL DEFAULT 0,
+ imported_rows bigint NOT NULL DEFAULT 0
+);
+ALTER TABLE ingest_day ADD COLUMN IF NOT EXISTS batch_id bigint REFERENCES ingest_batch(id);
+ALTER TABLE ingest_day ADD COLUMN IF NOT EXISTS source_fetched_at timestamptz;
