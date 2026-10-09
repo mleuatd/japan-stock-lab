@@ -84,8 +84,14 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
     dates=sorted(data)
     if cutoff not in dates: raise ValueError("Cutoff trading session missing")
     if start<=cutoff: raise ValueError("Replay must start after training cutoff")
+    if start not in dates or dates[dates.index(cutoff)+1] != start:
+        raise ValueError("Start must equal the first market session after cutoff")
+    unknown_days=set(corporate_actions)-set(dates)
+    if unknown_days: raise ValueError("Corporate actions must map to market sessions")
     hist=defaultdict(list)
     cash=float(initial);positions={};queue=[];ledger=[];daily=[]
+    realized_pnl=0.0
+    known_dividends=0.0
     for n,day in enumerate(dates):
         bars=data[day]
         # Apply only sourced and explicitly supplied corporate actions.
@@ -109,6 +115,7 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                 gross=pos["qty"]*amount
                 net=gross*(1-tax_rate)
                 cash+=net
+                known_dividends+=net
                 ledger.append({"date":day,"code":code,"side":"ACTION","status":"DIVIDEND","gross":round(gross,2),"net":round(net,2)})
         # At the first replay open: execute Jan30-close orders from Jan30 signal.
         if day>cutoff and day>=start:
@@ -125,6 +132,7 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                     tax=max(0,gross_gain)*tax_rate
                     received=proceeds-tax
                     cash+=received
+                    realized_pnl+=received-pos["cost"]
                     del positions[code]
                     ledger.append({"date":day,"code":code,"side":"SELL","qty":pos["qty"],"price":round(execution_price,4),
                                    "tax":round(tax,2),"realized_pnl":round(received-pos["cost"],2)})
@@ -166,12 +174,25 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
         if day>=start:
             if cash < -0.0001 or any(x["qty"]<=0 for x in positions.values()):
                 raise AssertionError("Non-cash or short position")
-            if all(code in bars for code in positions):
+            if all(code in bars and bars[code].close > 0 for code in positions):
                 value=cash+sum(pos["qty"]*bars[code].close for code,pos in positions.items())
             else:value=None
             daily.append({"date":day,"cash":round(cash,2),"total_equity":round(value,2) if value is not None else None,
                           "holdings":len(positions)})
+    known_values=[day["total_equity"] for day in daily]
+    if all(v is not None for v in known_values):
+        high=initial
+        max_dd=0.0
+        for value in known_values:
+            high=max(high,value)
+            max_dd=max(max_dd,(high-value)/high*100)
+    else:
+        max_dd=None
     return {"cash":round(cash,2),"held":positions,"fills":ledger,"equity":daily,
+            "final_equity":known_values[-1] if known_values else None,
+            "realized_pnl":round(realized_pnl,2),
+            "known_net_dividends":round(known_dividends,2),
+            "max_drawdown_pct":round(max_dd,4) if max_dd is not None else None,
             "unfilled_after_final_session":queue,
             "validation_status":"PROVISIONAL_UNVERIFIED",
             "accounting_note":"Corporate actions require complete dated external events; no automatic inference."}

@@ -55,3 +55,12 @@
 - Added tests/test_corporate_accounting.py, unified light CI test discovery.
 - **P0 remains OPEN**: Neon daily_bar has adjustment_factor but not complete verified dividend payment records or fractional entitlement cashouts. Do not claim actual portfolio return until external corporate-event ledger is sourced and reconciled.
 - Real Neon backtest on existing workflow is not restarted by this patch; full-Neon test is manual only.
+
+
+## 2026-10-10 続行：暫定会計指標・日付境界（Issue #2/#3/#6 一部）
+- Replay must begin exactly the first market session after cutoff; prevents deferred execution of the Jan 30 signal.
+- Explicit corporate event dates outside loaded sessions fail closed rather than silently disappear.
+- Independent totals added for realized P/L, known net dividends, final mark-to-market equity, and maximum drawdown. If ANY valuation day is unknown, maximum drawdown is unknown, not a deceptively optimistic estimate.
+- Missing or invalid final position closing prices prevent final-equity claims.
+- New regression cases cover skipped first session, unknown held price, accounting totals, and invalid action date.
+- Outstanding: historical corporate event completeness, realistic order liquidity, dividend entitlement and tax-lot correctness, broker-specific tax rounding, survivorship, robust out-of-sample strategy evaluation. All historical investment performance remains PROVISIONAL_UNVERIFIED.

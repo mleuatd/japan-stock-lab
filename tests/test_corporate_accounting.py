@@ -19,6 +19,29 @@ class CorporateAccountingTests(unittest.TestCase):
         self.start=self.days[120]
         self.rule={"lookback":3,"min_return_pct":0,"min_volume":0}
 
+    def test_start_must_be_immediate_market_session(self):
+        with self.assertRaises(ValueError):
+            replay(self.data,self.rule,cutoff=self.days[118],start=self.days[120])
+
+    def test_missing_final_held_close_does_not_fabricate_equity(self):
+        last=self.days[-1]
+        self.data[last].pop("11110")
+        self.data[last]["22220"]=bar(last,"22220",150)
+        r=replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
+                 allocation=10000,hold_days=90,fee_rate=0)
+        self.assertIsNone(r["final_equity"])
+        self.assertIsNone(r["max_drawdown_pct"])
+
+    def test_accounting_summary_and_missing_corporate_date(self):
+        r=replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
+                 allocation=10000,hold_days=90,fee_rate=0)
+        self.assertEqual(r["final_equity"],500000)
+        self.assertEqual(r["realized_pnl"],0)
+        self.assertEqual(r["max_drawdown_pct"],0)
+        with self.assertRaises(ValueError):
+            replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
+                   corporate_actions={"2099-01-01":{"11110":{"split_ratio":2}}})
+
     def test_split_preserves_cost_basis_and_no_negative_cash(self):
         # Existing January signal opens a 100-share position on the first test day.
         split_day=self.days[121]
