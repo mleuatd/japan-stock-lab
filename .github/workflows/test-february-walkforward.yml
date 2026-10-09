@@ -1,6 +1,11 @@
 name: February 2026 Frozen Walk-forward
 on:
   workflow_dispatch:
+    inputs:
+      diagnose_fixed_rule:
+        description: "Reproduce prior selected rule without re-training (diagnostic only)"
+        type: boolean
+        default: true
 permissions:
   contents: read
 concurrency:
@@ -36,7 +41,12 @@ jobs:
             echo "::error::DATABASE_URL unavailable; no actual backtest executed"
             exit 1
           fi
-          python february_walkforward.py --from-neon --cutoff 2026-01-30 --start 2026-02-02 --out private-february-walkforward.json
+          if [ "${{ inputs.diagnose_fixed_rule }}" = "true" ]; then
+            # Frozen candidate from recorded historical run 37992284803.
+            python february_walkforward.py --from-neon --cutoff 2026-01-30 --start 2026-02-02 --fixed-rule-json '{"lookback":3,"min_return_pct":-10,"min_volume":0}' --out private-february-walkforward.json
+          else
+            python february_walkforward.py --from-neon --cutoff 2026-01-30 --start 2026-02-02 --out private-february-walkforward.json
+          fi
           # Print only aggregate account-level metrics, no licensed stock row export.
           python - <<'PY'
           import json

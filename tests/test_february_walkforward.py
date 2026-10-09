@@ -46,6 +46,16 @@ class FebruaryWalkforwardTest(unittest.TestCase):
         reference.sort(key=lambda p:p[0],reverse=True)
         self.assertEqual(frozen_train(self.data,self.cutoff,min_events=2),reference)
 
+    def test_fixed_rule_replay_skips_training_without_leaking_holdout(self):
+        fixed={"lookback":3,"min_return_pct":-10,"min_volume":0}
+        outcome=experiment(self.data,self.cutoff,self.start,fixed_rule=fixed)
+        self.assertEqual(outcome["rules_tested"],0)
+        self.assertEqual(outcome["selection_provenance"],"EXTERNAL_PRIOR_RUN_NOT_RETRAINED")
+        self.assertIsNone(outcome["training_only"])
+        self.assertEqual(outcome["selected_rule_frozen_at_cutoff"],fixed)
+        with self.assertRaises(ValueError):
+            experiment(self.data,self.cutoff,self.start,fixed_rule={"lookback":7,"min_return_pct":0,"min_volume":0})
+
     def test_trained_rule_is_independent_of_any_post_cutoff_data(self):
         before=frozen_train(self.data,self.cutoff,min_events=2)
         modified={d:dict(x) for d,x in self.data.items()}

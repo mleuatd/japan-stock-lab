@@ -324,15 +324,26 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
             "validation_status":"PROVISIONAL_UNVERIFIED",
             "accounting_note":"Corporate actions require complete dated external events; no automatic inference."}
 
-def experiment(data,cutoff=CUTOFF,start=START):
-    candidates=frozen_train(data,cutoff)
-    if not candidates: return {"status":"no_qualifying_train_rule","cutoff":cutoff,"start":start,"rules_tested":len(candidate_rules())}
-    score,rule,n1,n2,r1,r2=candidates[0]
+def experiment(data,cutoff=CUTOFF,start=START,fixed_rule=None):
+    """Fixed-rule mode replays a PREVIOUSLY selected rule; it never re-trains."""
+    if fixed_rule is None:
+        candidates=frozen_train(data,cutoff)
+        if not candidates: return {"status":"no_qualifying_train_rule","cutoff":cutoff,"start":start,"rules_tested":len(candidate_rules())}
+        score,rule,n1,n2,r1,r2=candidates[0]
+        training={"split1_trades":n1,"split2_trades":n2,"mean_pct1":round(r1,3),"mean_pct2":round(r2,3)}
+        provenance="TRAINED_AS_OF_CUTOFF"
+    else:
+        if not isinstance(fixed_rule,dict) or set(fixed_rule)!={"lookback","min_return_pct","min_volume"} or fixed_rule not in candidate_rules():
+            raise ValueError("Fixed rule must exactly match a supported candidate")
+        rule=fixed_rule
+        training=None
+        provenance="EXTERNAL_PRIOR_RUN_NOT_RETRAINED"
     simulation=replay(data,rule,cutoff,start)
     return {"status":"completed","cutoff":cutoff,"start":start,"data_last_date":max(data),
-            "rules_tested":len(candidate_rules()),
+            "rules_tested":0 if fixed_rule is not None else len(candidate_rules()),
+            "selection_provenance":provenance,
             "selected_rule_frozen_at_cutoff":rule,
-            "training_only":{"split1_trades":n1,"split2_trades":n2,"mean_pct1":round(r1,3),"mean_pct2":round(r2,3)},
+            "training_only":training,
             "paper_result":simulation,"warnings":["Historical paper simulation, not live trading.",
             "Unadjusted open fills vs adjusted close signals need corporate action reconciliation.",
             "Corporate actions, halt/no-open, realistic liquidity, dividends/tax/slippage not yet fully modeled."]}
@@ -344,9 +355,11 @@ def main():
     ap.add_argument("--root",default="archive/daily")
     ap.add_argument("--from-neon",action="store_true")
     ap.add_argument("--out",default="private-february-walkforward.json")
+    ap.add_argument("--fixed-rule-json",help="Previously frozen candidate rule; skip costly retraining")
     a=ap.parse_args()
+    fixed_rule=json.loads(a.fixed_rule_json) if a.fixed_rule_json else None
     data=load_private_neon() if a.from_neon else load_bars(a.root)
-    result=experiment(data,a.cutoff,a.start)
+    result=experiment(data,a.cutoff,a.start,fixed_rule=fixed_rule)
     with open(a.out,"w",encoding="utf-8") as fh:json.dump(result,fh,ensure_ascii=False,indent=2)
     print(json.dumps({"status":result["status"],"cutoff":a.cutoff,"start":a.start,
         "rule_count":result["rules_tested"],"selected_rule":result.get("selected_rule_frozen_at_cutoff"),
