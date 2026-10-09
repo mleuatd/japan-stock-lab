@@ -1,0 +1,30 @@
+name: Private Neon Aggregate Quality Audit
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: private-neon-quality-audit
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify quality reporting logic
+        run: python -m unittest discover -s tests -p 'test_neon_data_quality.py' -v
+      - name: Install Neon client
+        run: python -m pip install 'psycopg[binary]>=3,<4'
+      - name: Read-only aggregate metrics
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::DATABASE_URL unavailable"
+            exit 1
+          fi
+          python neon_data_quality.py --cutoff 2026-01-30
