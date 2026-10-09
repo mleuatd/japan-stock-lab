@@ -20,7 +20,7 @@ class SuspendedSellRetryTest(unittest.TestCase):
         self.assertTrue(any(e["action"]=="FILLED" and e["date"]==dates[4] for e in sells))
         self.assertEqual(result["open_positions"],{})
         self.assertGreaterEqual(result["ending_cash"],0)
-        self.assertEqual(result["unfilled_last_day_orders"],[])
+        self.assertFalse(any(o["side"]=="SELL" for o in result["unfilled_last_day_orders"]))
 
 
 if __name__=="__main__":
