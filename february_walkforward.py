@@ -2,7 +2,7 @@
 """Frozen-as-of walk-forward experiment, long-only cash and next-session fills.
 No actual brokerage orders. Uses private Neon when DATABASE_URL provided.
 """
-import argparse, csv, json, os
+import argparse, csv, json, os, math
 from collections import defaultdict
 from statistics import mean
 from walkforward_backtest import Bar,load_bars,rule_matches
@@ -19,7 +19,7 @@ def load_private_neon():
             cur.execute("""SELECT trading_date,security_code,open_price,close_price,volume,adjusted_close
             FROM daily_bar ORDER BY trading_date,security_code""")
             for date,code,o,c,v,a in cur:
-                if None in (o,c,v,a) or min(o,c,a)<=0:continue
+                if None in (o,c,v,a) or not all(math.isfinite(float(x)) for x in (o,c,v,a)) or min(o,c,a)<=0 or v<0:continue
                 day=date.isoformat()
                 data[day][code]=Bar(day,code,float(o),float(c),int(v),float(a))
     return dict(sorted(data.items()))
@@ -160,7 +160,7 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
         if day>cutoff and day>=start:
             for order in sorted(queue,key=lambda o:0 if o["side"]=="SELL" else 1):
                 code=order["code"];b=bars.get(code)
-                if not b or b.open<=0 or b.volume<=0:
+                if not b or not math.isfinite(b.open) or b.open<=0 or not math.isfinite(b.volume) or b.volume<=0:
                     ledger.append({"date":day,"code":code,"side":order["side"],"status":"NO_OPEN"})
                     # Do not silently cancel the liquidation request while held.
                     # Retry at a later *observable* market open, not at a fake price.
@@ -205,7 +205,7 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
         for code,pos in positions.items():
             if code in exiting:continue
             observed=bars.get(code)
-            if observed is None or observed.close<=0:
+            if observed is None or not math.isfinite(observed.close) or observed.close<=0:
                 # Unknown quote cannot trigger a paper exit using a future price.
                 continue
             entry=pos["entry_price"]
@@ -229,7 +229,7 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
         lookback=int(rule.get("lookback",5))
         ranked=[]
         for code,b in bars.items():
-            if code in positions or code in exiting or b.volume<=0:
+            if code in positions or code in exiting or not math.isfinite(b.volume) or b.volume<=0 or not math.isfinite(b.adj_close) or b.adj_close<=0:
                 continue
             history=hist[code]
             # Never treat sparse per-security rows as consecutive sessions.
@@ -248,7 +248,7 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
             if (cash < -0.0001 or any(x["qty"]<=0 for x in positions.values())
                     or len(positions)>max_positions):
                 raise AssertionError("Non-cash or short position")
-            if all(code in bars and bars[code].close > 0 for code in positions):
+            if all(code in bars and math.isfinite(bars[code].close) and bars[code].close > 0 for code in positions):
                 value=cash+sum(pos["qty"]*bars[code].close for code,pos in positions.items())
             else:value=None
             daily.append({"date":day,"cash":round(cash,2),"total_equity":round(value,2) if value is not None else None,
@@ -259,20 +259,20 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
     final_session=dates[-1] if dates else None
     final_missing_prices=sum(
         1 for code in positions if code not in data[final_session]
-        or data[final_session][code].close<=0) if final_session else 0
+        or not math.isfinite(data[final_session][code].close) or data[final_session][code].close<=0) if final_session else 0
     # A stale quote is only an INDICATIVE scenario, never an actual final quote.
     # This exposes a usable estimate while preserving official final_equity=None.
     last_known_close={}
     for observed_day in dates:
         for ticker,bar in data[observed_day].items():
-            if bar.close>0:
+            if math.isfinite(bar.close) and bar.close>0:
                 last_known_close[ticker]=(observed_day,bar.close)
     stale_marks=[]
     indicative_equity=cash
     missing_stale_marks=0
     for ticker,pos in positions.items():
         quote=data[final_session].get(ticker) if final_session else None
-        if quote is not None and quote.close>0:
+        if quote is not None and math.isfinite(quote.close) and quote.close>0:
             indicative_equity+=pos["qty"]*quote.close
         elif ticker in last_known_close:
             quoted_day,stale_price=last_known_close[ticker]
