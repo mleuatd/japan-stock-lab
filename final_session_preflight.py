@@ -19,8 +19,25 @@ SELECT
           OR adjusted_close IS NULL OR volume IS NULL)) AS final_incomplete_rows,
  COUNT(DISTINCT security_code) FILTER (WHERE trading_date >=
        (SELECT d FROM latest)-INTERVAL '14 days') AS recent_symbols
-FROM daily_bar)
-SELECT * FROM recent
+FROM daily_bar),
+missing AS (
+ SELECT b.security_code FROM daily_bar b, latest l
+ WHERE b.trading_date=l.d AND (b.close_price IS NULL OR b.close_price<=0)
+),
+previous AS (
+ SELECT m.security_code, MAX(b.trading_date) prior_close_date
+ FROM missing m
+ LEFT JOIN daily_bar b ON b.security_code=m.security_code
+   AND b.trading_date<(SELECT d FROM latest) AND b.close_price>0
+ GROUP BY m.security_code
+),
+missing_summary AS (
+ SELECT COUNT(*) AS invalid_final_closes,
+ COUNT(*) FILTER (WHERE prior_close_date IS NOT NULL) AS previously_quoted,
+ COUNT(*) FILTER (WHERE prior_close_date IS NULL) AS never_quoted
+ FROM previous
+)
+SELECT * FROM recent CROSS JOIN missing_summary
 """
 
 def summarize(row):
@@ -32,6 +49,14 @@ def summarize(row):
     values["mark_to_market_risk"]=bool(
         values["final_close_missing_or_invalid"] or
         values["recent_symbols_not_on_final_day"])
+    if row.get("invalid_final_closes") is not None:
+        for k in ("invalid_final_closes","previously_quoted","never_quoted"):
+            values[k]=int(row[k])
+        if values["invalid_final_closes"] != values["previously_quoted"]+values["never_quoted"]:
+            raise ValueError("Final close deficiency categories do not reconcile")
+        if values["invalid_final_closes"] != values["final_close_missing_or_invalid"]:
+            raise ValueError("Final close aggregate disagrees with final-day count")
+        values["external_price_source_required"]=values["never_quoted"]>0
     values["result"]="AGGREGATE_ONLY_NOT_PORTFOLIO_VERIFIED"
     return values
 
