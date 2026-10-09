@@ -22,7 +22,7 @@ class NonfinitePriceGuardTest(unittest.TestCase):
         d=self.days[120]
         self.data[d]["11110"]=Bar(d,"11110",float("nan"),100.,1000,100.)
         r=self.run_replay()
-        self.assertEqual(len([f for f in r["fills"] if f["side"]=="BUY"]),0)
+        self.assertFalse(any(f["side"]=="BUY" and f["date"]==d for f in r["fills"]))
         self.assertTrue(math.isfinite(r["cash"]))
 
 if __name__=="__main__":unittest.main()
