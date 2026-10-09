@@ -34,6 +34,7 @@ def frozen_train(data,cutoff,min_events=25):
     if len(dates)<120: raise ValueError("Insufficient pre-cutoff history")
     # All model tuning is strictly prior to cutoff.
     split=int(len(dates)*.7)
+    next_session={day:dates[j+1] for j,day in enumerate(dates[:-1])}
     features=defaultdict(list)
     for day in dates:
         for code,b in data[day].items(): features[code].append(b)
@@ -46,7 +47,10 @@ def frozen_train(data,cutoff,min_events=25):
                 if d>cutoff:break
                 # Observe close on d; buy next OPEN; sell subsequent OPEN.
                 # Both future prices must also be <= cutoff for training.
-                if bars[i+2].date>cutoff or bars[i+1].open<=0:continue
+                if (bars[i+2].date>cutoff or bars[i+1].open<=0 or
+                    bars[i+1].date != next_session.get(d) or
+                    bars[i+2].date != next_session.get(bars[i+1].date)):
+                    continue
                 # Equivalent to rule_matches(bars[:i+1], rule) without
                 # allocating an ever-growing prefix for every candidate.
                 previous=bars[i-rule["lookback"]].adj_close
