@@ -46,10 +46,10 @@ def rule_matches(history, rule):
     pct=(today.adj_close/history[-1-lookback].adj_close-1)*100
     return pct>=threshold and today.volume>=min_volume
 
-def simulate(data,rule,initial_cash=3_000_000,allocation=0.1,fee_pct=0.0,hold_days=5,lot_size=100):
+def simulate(data,rule,initial_cash=500_000,allocation=0.1,fee_pct=0.0,hold_days=5,lot_size=100):
     """Return replay event log. Orders never fill on signal day. Conservatively
     skip unavailable next-open prices; no intra-day execution claims."""
-    if not(0<allocation<=1 and 0<=fee_pct<1 and hold_days>=1 and lot_size>=1):
+    if not(initial_cash>0 and 0<allocation<=1 and 0<=fee_pct<1 and hold_days>=1 and lot_size>=1):
         raise ValueError("invalid allocation, fees, holding duration or lot size")
     dates=sorted(data)
     history=defaultdict(list)
@@ -61,7 +61,10 @@ def simulate(data,rule,initial_cash=3_000_000,allocation=0.1,fee_pct=0.0,hold_da
     for index,date in enumerate(dates):
         current=data[date]
         # Orders from prior close execute at today's OPEN (or expire).
-        for o in orders:
+        # Existing holdings are sold first to free cash, then long-only buys are evaluated.
+        for o in sorted(orders,key=lambda item: 0 if item["side"]=="SELL" else 1):
+            if o["side"] not in ("BUY","SELL"):
+                raise ValueError("Only cash BUY and held-stock SELL are allowed")
             b=current.get(o["code"])
             if not b or b.open<=0 or b.volume<=0:
                 events.append(dict(date=date,code=o["code"],side=o["side"],action="SKIP_NO_OPEN"))
@@ -105,6 +108,8 @@ def simulate(data,rule,initial_cash=3_000_000,allocation=0.1,fee_pct=0.0,hold_da
     # Do not fabricate liquidation after dataset ends; outstanding orders are unfilled.
     realized=sum(e.get("pnl",0) for e in events)
     fills=[e for e in events if e["action"]=="FILLED"]
+    if any(pos["qty"]<=0 for pos in positions.values()) or cash < -0.00001:
+        raise AssertionError("Long-only, cash-funded invariant violated")
     return {"initial_cash":initial_cash,"ending_cash":round(cash,2),
             "realized_pnl":round(realized,2),"fills":fills,"events":events,
             "equity_curve":equity,"unfilled_last_day_orders":orders,
@@ -115,7 +120,7 @@ def main():
     p=argparse.ArgumentParser()
     p.add_argument("--root",default="archive/daily")
     p.add_argument("--rule-json",default='{"lookback":5,"min_return_pct":2,"min_volume":100000}')
-    p.add_argument("--initial-cash",type=float,default=3_000_000)
+    p.add_argument("--initial-cash",type=float,default=500_000)
     p.add_argument("--allocation",type=float,default=.1)
     p.add_argument("--hold-days",type=int,default=5)
     p.add_argument("--fee-pct",type=float,default=0)
