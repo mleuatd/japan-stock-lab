@@ -253,6 +253,13 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
             else:value=None
             daily.append({"date":day,"cash":round(cash,2),"total_equity":round(value,2) if value is not None else None,
                           "holdings":len(positions)})
+    # Aggregate observability for UNKNOWN mark-to-market outcomes. Never
+    # convert a missing quote to zero or a stale close without a policy.
+    valuation_gaps=[d["date"] for d in daily if d["total_equity"] is None]
+    final_session=dates[-1] if dates else None
+    final_missing_prices=sum(
+        1 for code in positions if code not in data[final_session]
+        or data[final_session][code].close<=0) if final_session else 0
     known_values=[day["total_equity"] for day in daily]
     if all(v is not None for v in known_values):
         high=initial
@@ -276,6 +283,14 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
             "known_net_dividends":round(known_dividends,2),
             "max_drawdown_pct":round(max_dd,4) if max_dd is not None else None,
             "unfilled_after_final_session":queue,
+            "valuation_diagnostics":{
+                "unpriced_days":len(valuation_gaps),
+                "first_unpriced_day":valuation_gaps[0] if valuation_gaps else None,
+                "last_unpriced_day":valuation_gaps[-1] if valuation_gaps else None,
+                "held_positions_final":len(positions),
+                "held_positions_without_final_close":final_missing_prices,
+                "final_equity_available":final_equity is not None,
+                "requires_source_data_review":bool(valuation_gaps)},
             "validation_status":"PROVISIONAL_UNVERIFIED",
             "accounting_note":"Corporate actions require complete dated external events; no automatic inference."}
 

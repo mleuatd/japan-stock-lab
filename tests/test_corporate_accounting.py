@@ -32,6 +32,27 @@ class CorporateAccountingTests(unittest.TestCase):
         self.assertIsNone(r["final_equity"])
         self.assertIsNone(r["max_drawdown_pct"])
 
+    def test_missing_final_quote_reports_audit_diagnostics_without_fake_equity(self):
+        last=self.days[-1]
+        self.data[last].pop("11110")
+        self.data[last]["22220"]=bar(last,"22220",150)
+        result=replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
+                      allocation=10000,hold_days=90,fee_rate=0)
+        diag=result["valuation_diagnostics"]
+        self.assertEqual(diag["held_positions_without_final_close"],1)
+        self.assertEqual(diag["held_positions_final"],1)
+        self.assertEqual(diag["first_unpriced_day"],last)
+        self.assertFalse(diag["final_equity_available"])
+        self.assertIsNone(result["final_equity"])
+
+    def test_complete_final_quote_is_observable(self):
+        result=replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
+                      allocation=10000,hold_days=90,fee_rate=0)
+        diag=result["valuation_diagnostics"]
+        self.assertEqual(diag["held_positions_without_final_close"],0)
+        self.assertTrue(diag["final_equity_available"])
+        self.assertEqual(diag["unpriced_days"],0)
+
     def test_accounting_summary_and_missing_corporate_date(self):
         r=replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
                  allocation=10000,hold_days=90,fee_rate=0)

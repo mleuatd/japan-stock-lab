@@ -36,7 +36,8 @@ jobs:
           curve=paper.get("equity",[])
           print("status",r["status"],"rules_tested",r["rules_tested"],
                 "filled_events",len(paper.get("fills",[])),"ending_cash",paper.get("cash"),
-                "ending_equity",curve[-1]["total_equity"] if curve else None)
+                "ending_equity",curve[-1]["total_equity"] if curve else None,
+                "valuation_diagnostics",paper.get("valuation_diagnostics"))
           PY
       - name: Ensure no privately licensed data persists in runner
         if: always()
