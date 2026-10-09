@@ -47,7 +47,13 @@ def frozen_train(data,cutoff,min_events=25):
                 # Observe close on d; buy next OPEN; sell subsequent OPEN.
                 # Both future prices must also be <= cutoff for training.
                 if bars[i+2].date>cutoff or bars[i+1].open<=0:continue
-                if rule_matches(bars[:i+1],rule):
+                # Equivalent to rule_matches(bars[:i+1], rule) without
+                # allocating an ever-growing prefix for every candidate.
+                previous=bars[i-rule["lookback"]].adj_close
+                current=bars[i]
+                if (previous>0 and
+                    (current.adj_close/previous-1)*100 >= rule["min_return_pct"] and
+                    current.volume>=rule["min_volume"]):
                     r=(bars[i+2].open/bars[i+1].open-1)*100
                     by_segment[0 if d<=dates[split-1] else 1].append(r)
         a,b=by_segment
