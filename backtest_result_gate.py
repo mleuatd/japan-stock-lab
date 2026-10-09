@@ -16,6 +16,8 @@ def evaluate(result):
     diagnostics=paper.get("valuation_diagnostics") or {}
     if not diagnostics.get("final_equity_available",False):
         return False,"FINAL_VALUATION_UNVERIFIED"
+    if (paper.get("ledger_audit") or {}).get("audit")!="INTERNAL_CASH_AND_QUANTITY_RECONCILED":
+        return False,"ACCOUNTING_LEDGER_UNVERIFIED"
     if paper.get("validation_status")!="PROVISIONAL_UNVERIFIED":
         return False,"UNEXPECTED_VALIDATION_STATUS"
     return True,"PROVISIONAL_EQUITY_AVAILABLE_NOT_VERIFIED"
