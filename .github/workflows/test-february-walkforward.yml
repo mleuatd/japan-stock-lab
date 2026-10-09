@@ -1,12 +1,6 @@
 name: February 2026 Frozen Walk-forward
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'february_walkforward.py'
-      - 'tests/test_february_walkforward.py'
-      - '.github/workflows/test-february-walkforward.yml'
 permissions:
   contents: read
 concurrency:
