@@ -6,6 +6,7 @@ import argparse, csv, json, os, math
 from collections import defaultdict, deque
 from statistics import mean
 from walkforward_backtest import Bar,load_bars,rule_matches
+from paper_ledger_accounting import reconcile
 
 CUTOFF="2026-01-30"
 START="2026-02-02"
@@ -156,7 +157,7 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                 net=gross*(1-tax_rate)
                 cash+=net
                 known_dividends+=net
-                ledger.append({"date":day,"code":code,"side":"ACTION","status":"DIVIDEND","gross":round(gross,2),"net":round(net,2)})
+                ledger.append({"date":day,"code":code,"side":"ACTION","status":"DIVIDEND","gross":round(gross,2),"net":round(net,2),"net_credit":net})
         # At the first replay open: execute Jan30-close orders from Jan30 signal.
         pending_sell_retries=[]
         if day>cutoff and day>=start:
@@ -182,7 +183,7 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                     del positions[code]
                     ledger.append({"date":day,"code":code,"side":"SELL","qty":pos["qty"],"price":round(execution_price,4),
                                    "signal_reason":order.get("reason","UNKNOWN"),
-                                   "tax":round(tax,2),"realized_pnl":round(received-pos["cost"],2)})
+                                   "tax":round(tax,2),"realized_pnl":round(received-pos["cost"],2),"net_credit":received})
                 else:
                     if code in positions or len(positions)>=max_positions:continue
                     limit=min(cash,allocation)
@@ -195,7 +196,7 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                     positions[code]={"qty":qty,"cost":spent,"index":n,
                                      "entry_price":execution_price,
                                      "peak_close":execution_price}
-                    ledger.append({"date":day,"code":code,"side":"BUY","qty":qty,"price":round(execution_price,4)})
+                    ledger.append({"date":day,"code":code,"side":"BUY","qty":qty,"price":round(execution_price,4),"total_debit":spent})
         queue=pending_sell_retries
         for code,b in bars.items():hist[code].append(b)
         for code,pos in positions.items():
@@ -303,7 +304,9 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                     positions[code]["cost"]) for code in positions) if final_equity is not None else None
     if final_equity is not None and abs(final_equity-(initial+realized_pnl+known_dividends+unrealized))>0.03:
         raise AssertionError("Portfolio accounting identity failed")
+    cash_and_shares_check=reconcile(initial,ledger,positions,cash)
     return {"cash":round(cash,2),"held":positions,"fills":ledger,"equity":daily,
+            "ledger_audit":cash_and_shares_check,
             "final_equity":known_values[-1] if known_values else None,
             "realized_pnl":round(realized_pnl,2),
             "unrealized_pnl":round(unrealized,2) if unrealized is not None else None,
