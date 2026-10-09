@@ -94,9 +94,20 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
         for code,pos in positions.items():
             if n-pos["index"] >= hold_days-1:
                 queue.append({"side":"SELL","code":code});exiting.add(code)
-        candidates=sorted((code for code in bars if code not in positions
-                           and code not in exiting and bars[code].volume>0
-                           and rule_matches(hist[code],rule)),key=str)
+        # Prioritize the strongest observable signal, not alphabetic ticker order.
+        # Never inspect next-session prices while ranking today's candidates.
+        lookback=int(rule.get("lookback",5))
+        ranked=[]
+        for code,b in bars.items():
+            if code in positions or code in exiting or b.volume<=0:
+                continue
+            history=hist[code]
+            if not rule_matches(history,rule):
+                continue
+            strength=(history[-1].adj_close/history[-1-lookback].adj_close-1)*100
+            ranked.append((-strength,code))
+        ranked.sort()  # stable tie-break by code
+        candidates=[code for _,code in ranked]
         for code in candidates[:10]:
             queue.append({"side":"BUY","code":code})
         if day>=start:
