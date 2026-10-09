@@ -1,14 +1,18 @@
 -- Personal-use views: never expose licensed output on public web services.
 CREATE OR REPLACE VIEW daily_change_rank AS
-WITH prepared AS (
+WITH market_calendar AS (
+ SELECT trading_date, LAG(trading_date) OVER (ORDER BY trading_date) AS previous_market_date
+ FROM (SELECT DISTINCT trading_date FROM daily_bar) sessions
+), prepared AS (
  SELECT trading_date,security_code,adjusted_close,volume,trading_value,
  LAG(adjusted_close) OVER(PARTITION BY security_code ORDER BY trading_date) AS previous_adjusted_close,
  LAG(trading_date) OVER(PARTITION BY security_code ORDER BY trading_date) AS previous_trading_date
  FROM daily_bar
 ), changes AS (
- SELECT *, CASE WHEN previous_adjusted_close>0 AND adjusted_close IS NOT NULL THEN
- ROUND((adjusted_close/previous_adjusted_close-1)*100,4) ELSE NULL END AS pct_change
- FROM prepared
+ SELECT p.*, CASE WHEN p.previous_trading_date = c.previous_market_date
+ AND p.previous_adjusted_close>0 AND p.adjusted_close IS NOT NULL THEN
+ ROUND((p.adjusted_close/p.previous_adjusted_close-1)*100,4) ELSE NULL END AS pct_change
+ FROM prepared p JOIN market_calendar c USING (trading_date)
 ), ranks AS (
  SELECT *, ROW_NUMBER() OVER(PARTITION BY trading_date ORDER BY pct_change DESC NULLS LAST,security_code) AS daily_rank
  FROM changes WHERE pct_change IS NOT NULL
