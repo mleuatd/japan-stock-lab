@@ -7,6 +7,7 @@ import argparse
 import csv
 import gzip
 import json
+import math
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -66,7 +67,7 @@ def simulate(data,rule,initial_cash=500_000,allocation=0.1,fee_pct=0.0,hold_days
             if o["side"] not in ("BUY","SELL"):
                 raise ValueError("Only cash BUY and held-stock SELL are allowed")
             b=current.get(o["code"])
-            if not b or b.open<=0 or b.volume<=0:
+            if not b or not math.isfinite(b.open) or b.open<=0 or b.volume<=0:
                 events.append(dict(date=date,code=o["code"],side=o["side"],action="SKIP_NO_OPEN"))
                 continue
             code=o["code"]
@@ -102,8 +103,10 @@ def simulate(data,rule,initial_cash=500_000,allocation=0.1,fee_pct=0.0,hold_days
             if code not in positions and code not in exits and rule_matches(history[code],rule):
                 orders.append({"side":"BUY","code":code})
         # Mark to market only using observable latest CLOSE, not future close.
-        mtm=sum(pos["qty"]*current[code].close for code,pos in positions.items() if code in current)
-        missing=sum(1 for code in positions if code not in current)
+        mtm=sum(pos["qty"]*current[code].close for code,pos in positions.items()
+                if code in current and math.isfinite(current[code].close) and current[code].close>0)
+        missing=sum(1 for code in positions if code not in current
+                    or not math.isfinite(current[code].close) or current[code].close<=0)
         equity.append(dict(date=date,cash=round(cash,2),equity=round(cash+mtm,2) if not missing else None,open_positions=len(positions)))
     # Do not fabricate liquidation after dataset ends; outstanding orders are unfilled.
     realized=sum(e.get("pnl",0) for e in events)
