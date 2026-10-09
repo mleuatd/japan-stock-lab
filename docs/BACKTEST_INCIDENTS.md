@@ -64,3 +64,8 @@
 - Missing or invalid final position closing prices prevent final-equity claims.
 - New regression cases cover skipped first session, unknown held price, accounting totals, and invalid action date.
 - Outstanding: historical corporate event completeness, realistic order liquidity, dividend entitlement and tax-lot correctness, broker-specific tax rounding, survivorship, robust out-of-sample strategy evaluation. All historical investment performance remains PROVISIONAL_UNVERIFIED.
+
+## 2026-10-10 追加修正: 配当権利と疎な価格履歴
+- Dividend payout requires explicit entitlement_date earlier than payment date; credit only if same security held at entitlement-date close. No ex-date metadata => fail closed.
+- Reject lookback signals based on securities missing an intervening market session.
+- Still PROVISIONAL_UNVERIFIED: corporate action ledger and actual dividend payment data unavailable; cash and taxes are simplified.

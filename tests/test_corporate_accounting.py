@@ -42,6 +42,25 @@ class CorporateAccountingTests(unittest.TestCase):
             replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
                    corporate_actions={"2099-01-01":{"11110":{"split_ratio":2}}})
 
+    def test_dividend_requires_entitlement_and_does_not_pay_new_holder(self):
+        payment=self.days[121]
+        with self.assertRaises(ValueError):
+            replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
+                   corporate_actions={payment:{"11110":{"cash_dividend_per_share":10}}})
+        result=replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
+               allocation=10000,hold_days=90,fee_rate=0,
+               corporate_actions={payment:{"11110":{"cash_dividend_per_share":10,
+                                                        "entitlement_date":self.cutoff}}})
+        self.assertEqual(result["known_net_dividends"],0)
+
+    def test_dividend_paid_after_sale_to_prior_entitled_holder(self):
+        day=self.days[121]
+        r=replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
+                 allocation=10000,hold_days=1,fee_rate=0,
+                 corporate_actions={day:{"11110":{"cash_dividend_per_share":10,
+                                                      "entitlement_date":self.days[120]}}})
+        self.assertEqual(r["known_net_dividends"],1000)
+
     def test_split_preserves_cost_basis_and_no_negative_cash(self):
         # Existing January signal opens a 100-share position on the first test day.
         split_day=self.days[121]
@@ -58,7 +77,7 @@ class CorporateAccountingTests(unittest.TestCase):
         day=self.days[121]
         r=replay(self.data,self.rule,cutoff=self.cutoff,start=self.start,
                  allocation=10000,hold_days=90,fee_rate=0,tax_rate=.2,
-                 corporate_actions={day:{"11110":{"cash_dividend_per_share":10}}})
+                 corporate_actions={day:{"11110":{"cash_dividend_per_share":10,"entitlement_date":self.days[120]}}})
         self.assertEqual(r["cash"],490800)
         self.assertTrue(any(x.get("status")=="DIVIDEND" and x["net"]==800 for x in r["fills"]))
 

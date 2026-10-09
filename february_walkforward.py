@@ -77,7 +77,8 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
     Dividend cash is credited on the supplied *payment* date, not ex-date.
     Missing events are not inferred from adjustment factors. Report is provisional.
     """
-    if not (initial > 0 and lot > 0 and allocation > 0 and hold_days > 0
+    if not (initial > 0 and isinstance(lot,int) and lot > 0 and allocation > 0
+            and isinstance(hold_days,int) and hold_days > 0
             and 0 <= fee_rate < 1 and 0 <= slippage_rate < 1 and 0 <= tax_rate < 1):
         raise ValueError("Invalid long-only paper-account parameters")
     corporate_actions=corporate_actions or {}
@@ -90,16 +91,20 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
     if unknown_days: raise ValueError("Corporate actions must map to market sessions")
     hist=defaultdict(list)
     cash=float(initial);positions={};queue=[];ledger=[];daily=[]
+    # A corporate event must not be assigned to holdings created after entitlement.
+    # For dividends, entitlement_date (ex-date prior close) is mandatory.
+    dividend_entitled={}
     realized_pnl=0.0
     known_dividends=0.0
     for n,day in enumerate(dates):
         bars=data[day]
+        # Process entitlement at the close of the supplied trading session,
+        # never from data observed later. See capture after close below.
         # Apply only sourced and explicitly supplied corporate actions.
         for code,event in corporate_actions.get(day,{}).items():
-            if code not in positions:
-                continue
-            pos=positions[code]
+            pos=positions.get(code)
             if "split_ratio" in event:
+                if pos is None: continue
                 ratio=event["split_ratio"]
                 if not (isinstance(ratio,(int,float)) and 0 < ratio < float("inf")):
                     raise ValueError("Invalid split ratio")
@@ -109,10 +114,17 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                 pos["qty"]=int(round(new_qty))
                 ledger.append({"date":day,"code":code,"side":"ACTION","status":"SPLIT","ratio":ratio,"qty":pos["qty"]})
             if "cash_dividend_per_share" in event:
+                entitlement=event.get("entitlement_date")
+                if entitlement is None or entitlement >= day or entitlement not in dates:
+                    raise ValueError("Dividend requires a prior observed entitlement date")
+                entitled_qty=dividend_entitled.get((code,entitlement),0)
+                if not entitled_qty:
+                    ledger.append({"date":day,"code":code,"side":"ACTION","status":"NO_DIVIDEND_ENTITLEMENT"})
+                    continue
                 amount=event["cash_dividend_per_share"]
                 if not (isinstance(amount,(int,float)) and 0 <= amount < float("inf")):
                     raise ValueError("Invalid dividend")
-                gross=pos["qty"]*amount
+                gross=entitled_qty*amount
                 net=gross*(1-tax_rate)
                 cash+=net
                 known_dividends+=net
@@ -149,6 +161,8 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                     ledger.append({"date":day,"code":code,"side":"BUY","qty":qty,"price":round(execution_price,4)})
         queue=[]
         for code,b in bars.items():hist[code].append(b)
+        for code,pos in positions.items():
+            dividend_entitled[(code,day)]=pos["qty"]
         if day<cutoff:continue
         # Decisions at CLOSE, after that session has become observable.
         exiting=set()
@@ -163,6 +177,9 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
             if code in positions or code in exiting or b.volume<=0:
                 continue
             history=hist[code]
+            # Never treat sparse per-security rows as consecutive sessions.
+            if n < lookback or len(history) < lookback+1 or history[-1-lookback].date != dates[n-lookback]:
+                continue
             if not rule_matches(history,rule):
                 continue
             strength=(history[-1].adj_close/history[-1-lookback].adj_close-1)*100
