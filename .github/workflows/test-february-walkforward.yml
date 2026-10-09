@@ -48,6 +48,7 @@ jobs:
                 "ending_equity",curve[-1]["total_equity"] if curve else None,
                 "valuation_diagnostics",paper.get("valuation_diagnostics"))
           PY
+          python backtest_result_gate.py private-february-walkforward.json
       - name: Ensure no privately licensed data persists in runner
         if: always()
         run: rm -f private-february-walkforward.json
