@@ -11,15 +11,26 @@ from jpx_market_risk import risk_as_of_close,risk_as_of_open
 
 CUTOFF="2026-01-30"
 START="2026-02-02"
-def load_private_neon():
+def load_private_neon(since=None):
+    # For a frozen rule reusing only the three preceding market sessions,
+    # caller may explicitly bound the SQL download to Jan 2026 onward.
+    if since is not None:
+        from datetime import date
+        date.fromisoformat(since)
     import psycopg
     u=os.environ.get("DATABASE_URL")
     if not u: raise RuntimeError("DATABASE_URL missing")
     data=defaultdict(dict)
     with psycopg.connect(u,sslmode="require") as con:
         with con.cursor(name="chronological_backtest") as cur:
-            cur.execute("""SELECT trading_date,security_code,open_price,close_price,volume,adjusted_close,high_price,low_price
-            FROM daily_bar ORDER BY trading_date,security_code""")
+            sql = """SELECT trading_date,security_code,open_price,close_price,volume,adjusted_close,high_price,low_price
+            FROM daily_bar"""
+            params = ()
+            if since is not None:
+                sql += " WHERE trading_date >= %s::date"
+                params = (since,)
+            sql += " ORDER BY trading_date,security_code"
+            cur.execute(sql,params)
             for date,code,o,c,v,a,h,l in cur:
                 if None in (o,c,v,a) or not all(math.isfinite(float(x)) for x in (o,c,v,a)) or min(o,c,a)<=0 or v<0:continue
                 day=date.isoformat()
