@@ -32,3 +32,14 @@ Neonでの確認:
     GROUP BY status;
 
 結論に必要な評価は SURVIVOR の loss_pct と同じ日付の ALL の loss_pct の差、途中-5/-10%の差、未知銘柄の件数、残存数。残存群のほうが悪ければそのまま失敗と記録する。
+
+## Primary-objective fail-closed gate
+
+sql/011_risk_veto_primary_loss_gate.sql creates a read-only view named risk_veto_union_effectiveness_20day. If 20-session ANY-negative-return risk in survivor signals is greater than or equal to the same-period all-eligible baseline, the verdict is FAIL_PRIMARY_ANY_LOSS_RATE. If lower, the verdict remains IMPROVED_HISTORICALLY_NOT_PROSPECTIVELY_VALIDATED. All results always show trading_approval=NOT_APPROVED.
+
+An apparent reduction in -5%/-10% intraday lows cannot override failure of the user's primary ANY-negative objective. The view also compares daily data with 30-market-session spacing. Neither approach supplies a truly untouched prospective sample.
+
+Private query:
+
+    SELECT sampling,primary_objective_result,trading_approval
+    FROM risk_veto_union_effectiveness_20day;
