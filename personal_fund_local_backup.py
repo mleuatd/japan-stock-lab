@@ -19,11 +19,12 @@ TABLES = (
     "personal_fund_source", "personal_fund_catalog",
     "personal_fund_estimated_purchase", "personal_fund_snapshot",
     "personal_fund_position", "personal_fund_recurring_plan",
-    "personal_fund_annual_estimate",
+    "personal_fund_annual_estimate", "personal_fund_inferred_cashflow",
 )
 VIEWS = (
     "personal_fund_snapshot_summary", "personal_fund_monthly_chart",
     "personal_fund_asset_history_for_chart", "personal_fund_position_change",
+    "personal_fund_monthly_cashflow_chart",
 )
 
 def safe_output_path(path, repo_dir):
@@ -125,7 +126,8 @@ def main():
     output.mkdir(parents=True,exist_ok=True)
     save_sqlite(output/"personal_funds.sqlite3",all_data)
     for name in ("personal_fund_snapshot_summary","personal_fund_monthly_chart",
-                 "personal_fund_asset_history_for_chart"):
+                 "personal_fund_asset_history_for_chart",
+                 "personal_fund_monthly_cashflow_chart"):
         columns,rows=all_data[name]
         with (output/(name+".csv")).open("w",newline="",encoding="utf-8-sig") as f:
             csvwriter=csv.writer(f);csvwriter.writerow(columns);csvwriter.writerows(rows)
