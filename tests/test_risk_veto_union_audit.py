@@ -112,8 +112,9 @@ class UnionResearchTests(unittest.TestCase):
         result = evaluate_rows(bars, days, set(), "2026-02-02")
         self.assertGreater(result["unknown_signals"].get("UNKNOWN_INVALID_OHLCV", 0), 0)
         for cohort in ("ALL", "SURVIVOR"):
-            self.assertEqual(result["cohorts"][("daily", cohort, 20)]["events"],
-                             result["cohorts"][("daily", cohort, 20)]["observed"])
+            bucket = result["cohorts"][("daily", cohort, 20)]
+            self.assertEqual(bucket["events"], bucket["observed"] + bucket["missing"])
+            self.assertGreater(bucket["missing"], 0)
 
 
 if __name__ == "__main__":
