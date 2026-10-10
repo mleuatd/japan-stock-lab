@@ -1,0 +1,38 @@
+name: Daily no-loss-pattern research watch
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'risk_veto_daily_screen.py'
+      - 'sql/009_risk_veto_watchlist.sql'
+      - '.github/workflows/risk-veto-daily.yml'
+  schedule:
+    - cron: '55 14 * * 1-5' # 23:55 JST on weekdays, after TSE close
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: neon-private-risk-veto-daily
+  cancel-in-progress: false
+jobs:
+  research-only-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate negative-pattern veto and no-buy state gates
+        run: python -m unittest discover -s tests -p 'test_risk_veto_daily_screen.py' -v
+      - name: Install Neon connector client
+        run: python -m pip install 'psycopg[binary]>=3,<4'
+      - name: Update PRIVATE candidate audit, never approve orders
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TZ: Asia/Tokyo
+        run: |
+          test -n "$DATABASE_URL" || { echo "::error::Missing secret DATABASE_URL"; exit 1; }
+          python risk_veto_daily_screen.py --write-db
+      - name: Keep daily list private and trading disabled
+        run: echo 'Screen is research-only. No actual buy permission even when zero confirmed negative patterns matched.'
