@@ -11,7 +11,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: private-portfolio-500k-conditional-windowed
+  group: private-portfolio-500k-large-batch
   cancel-in-progress: false
 jobs:
   audited-paper-capital-replay:
