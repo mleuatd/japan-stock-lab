@@ -3,7 +3,7 @@ import datetime as dt
 import unittest
 from risk_veto_daily_screen import (
     select_veto_patterns,build_shortlist,judge_symbol,verify_window,
-    freshness,wilson,MODEL
+    freshness,wilson,MODEL,primary_gate_verdict
 )
 def stat(pattern,segment,metric=None,value=30,n=1000,unique=250):
     r={"pattern_code":pattern,"segment":segment,"horizon":20,
@@ -86,6 +86,30 @@ class DailyRiskVetoTests(unittest.TestCase):
         self.assertEqual(no_rules["state"],"BASELINE_UNAVAILABLE")
         r=judge_symbol("11110",bars_21()[1],days,no_rules)
         self.assertEqual(r["status"],"UNKNOWN_NO_VERIFIED_NEGATIVE_RULES")
+    def test_primary_loss_gate_requires_both_samples_and_same_source_day(self):
+        day="2026-07-17"
+        good="IMPROVED_HISTORICALLY_NOT_PROSPECTIVELY_VALIDATED"
+        fail="FAIL_PRIMARY_ANY_LOSS_RATE"
+        self.assertEqual(primary_gate_verdict([],day),
+                         "PRIMARY_RISK_AUDIT_MISSING_NO_SCREEN")
+        self.assertEqual(primary_gate_verdict([("daily",good,day)],day),
+                         "PRIMARY_RISK_AUDIT_MISSING_NO_SCREEN")
+        self.assertEqual(primary_gate_verdict([("daily",fail,day),
+                                               ("spaced30",fail,day)],day),
+                         "PRIMARY_LOSS_RATE_FAILED_NO_SCREEN")
+        self.assertEqual(primary_gate_verdict([("daily",good,day),
+                                               ("spaced30",good,"2026-06-30")],day),
+                         "PRIMARY_RISK_AUDIT_STALE_NO_SCREEN")
+        self.assertEqual(primary_gate_verdict([("daily",good,day),
+                                               ("spaced30",good,day)],day),
+                         "PRIMARY_RESEARCH_IMPROVEMENT_ONLY")
+
+    def test_invalid_earlier_candles_are_never_cleared(self):
+        days,rows=bars_21()
+        rows[3]["low_price"]=None
+        result=judge_symbol("11110",rows,days,self.model)
+        self.assertEqual(result["status"],"UNKNOWN_INVALID_CANDLES")
+
     def test_stale_data_blocks_everything(self):
         days,rows=bars_21(start="2026-07-01")
         self.assertFalse(freshness(days[-1],"2026-10-10"))
