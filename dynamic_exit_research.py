@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from downside_pattern_research import adjusted
+from split_adjustment_guard import inspect_guard
 from risk_veto_union_audit import FEE_PER_SIDE, net_pct, read_train_rules, signal_status
 
 STATUS = "RETROSPECTIVE_ADAPTIVE_EXIT_NOT_APPROVED"
@@ -259,6 +260,7 @@ def choose_train_only(stats, minimum=400):
 
 
 def from_neon(conn, train_split=TRAIN_SPLIT):
+    blocked, split_summary = inspect_guard(conn)
     source_run, holdout_start, rules = read_train_rules(conn)
     with conn.cursor() as cur:
         cur.execute("SELECT train_end FROM downside_pattern_run_v2 WHERE run_key=%s",
@@ -279,6 +281,8 @@ def from_neon(conn, train_split=TRAIN_SPLIT):
                        open_price,high_price,low_price,close_price,volume
                        FROM daily_bar ORDER BY security_code,trading_date""")
         for code, day, adj, op, hi, lo, close, vol in cur:
+            if code in blocked:
+                continue
             if current is not None and current != code:
                 evaluate_one(current, obs, days, ranges, veto, stats, exits, unknown)
                 scanned += 1
@@ -296,6 +300,7 @@ def from_neon(conn, train_split=TRAIN_SPLIT):
             scanned += 1
     return {
         "source_run_key": source_run, "source_train_end": train_end,
+        "corporate_action_guard": split_summary,
         "train_split": train_split, "holdout_start": holdout_start,
         "last_source_day": days[-1], "symbols_scanned": scanned,
         "rules": len(veto), "statistics": dict(stats),
@@ -308,6 +313,7 @@ def store(conn, result, commit_sha):
     identity = "|".join((
         POLICIES_VERSION, result["source_run_key"], commit_sha,
         result["train_split"], result["holdout_start"], result["last_source_day"],
+        result["corporate_action_guard"]["guard_version"],
     ))
     key = hashlib.sha256(identity.encode()).hexdigest()[:32]
     ddl = Path("sql/013_dynamic_exit_research.sql").read_text(encoding="utf8")
@@ -384,6 +390,7 @@ def main():
         "status": STATUS, "version": POLICIES_VERSION,
         "policy_count": len(POLICIES), "source_run": result["source_run_key"],
         "rules": result["rules"], "symbols_scanned": result["symbols_scanned"],
+        "corporate_action_guard": result["corporate_action_guard"],
         "source_through": result["last_source_day"],
         "selection": result["selection"], "summary": summary,
         "run_key": key, "stored": bool(key), "trading_approval": "NOT_APPROVED",
