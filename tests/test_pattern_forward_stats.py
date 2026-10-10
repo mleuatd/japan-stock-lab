@@ -69,7 +69,7 @@ class PatternHorizonTests(unittest.TestCase):
         self.assertGreater(train30["unmatured"],0)
         self.assertNotEqual(train30["events"],train30["observed"])
     def test_missing_next_market_session_is_missing_not_shifted(self):
-        days,data=build_data(130,missing=31)
+        days,data=build_data(130,missing=21)
         res=analyze(data,train_end=days[69],holdout_start=days[70])
         one=[r for r in res["stats"] if r["segment"]=="train"
              and r["pattern_code"]=="BASE" and r["trading_days_after"]==1][0]
