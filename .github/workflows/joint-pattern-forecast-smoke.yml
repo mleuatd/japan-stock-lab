@@ -1,0 +1,51 @@
+name: Joint-pattern forecast Neon integration check
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'joint_pattern_forecast.py'
+      - '.github/workflows/joint-pattern-forecast-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: neon-private-joint-pattern-check
+  cancel-in-progress: false
+jobs:
+  verify-real-neon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate local pattern identification and SQL construction
+        run: python -m unittest discover -s tests -p 'test_joint_pattern_forecast.py' -v
+      - name: Install PostgreSQL client
+        run: python -m pip install 'psycopg[binary]>=3,<4'
+      - name: Calculate historical joint-pattern sample only (not live prices)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          test -n "$DATABASE_URL" || { echo "::error::Missing DATABASE_URL"; exit 1; }
+          python joint_pattern_forecast.py --symbol 7846 --as-of 2026-10-09 --patterns HIGH20,SMA_BULL --base-price 2173.5 --out /tmp/private-joint-pilot-example.json
+      - name: Check 30 real historical outcome rows and remove data file
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path("/tmp/private-joint-pilot-example.json")
+          if p.exists():
+              j=json.loads(p.read_text(encoding="utf8"))
+              assert len(j["days"])==30
+              assert j["pattern_codes"]==["HIGH20","SMA_BULL"]
+              assert j["days"][0]["observed_examples"]>100
+              assert j["days"][-1]["observed_examples"]>100
+              assert j["status"]=="PROVISIONAL_NOT_A_CALIBRATED_FORECAST"
+              print("30 horizons confirmed. Historically descriptive; not a trading forecast.")
+              p.unlink()
+          else:
+              raise SystemExit("Missing calculation output; upstream computation failed")
+          PY
