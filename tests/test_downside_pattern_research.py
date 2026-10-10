@@ -74,7 +74,7 @@ class DownsidePatternV2Tests(unittest.TestCase):
         records=list(data.items())
         totals=defaultdict(blank)
         uniques=defaultdict(set)
-        count_outcomes("11110",records,dates,dates[35],dates[36],totals,uniques)
+        count_outcomes(totals,"11110",records,dates,dates[35],dates[36],uniques)
         k=totals[("train","BASE",1)]
         self.assertEqual(k["observed"],1)
         self.assertEqual(k["flat"],1)
@@ -88,7 +88,7 @@ class DownsidePatternV2Tests(unittest.TestCase):
         dates=sessions(46)
         observations=[(i,bar(100)) for i in range(46) if i!=21]
         totals=defaultdict(blank);symbols=defaultdict(set)
-        count_outcomes("11110",observations,dates,dates[35],dates[36],totals,symbols)
+        count_outcomes(totals,"11110",observations,dates,dates[35],dates[36],symbols)
         day1=totals[("train","BASE",1)]
         self.assertEqual(day1["missing"],1)
         self.assertEqual(day1["down"],0)
@@ -99,7 +99,7 @@ class DownsidePatternV2Tests(unittest.TestCase):
         obs=[(i,bar(100)) for i in range(48)]
         obs[21][1]["low_price"]=None
         total=defaultdict(blank);sym=defaultdict(set)
-        count_outcomes("11110",obs,dates,dates[35],dates[36],total,sym)
+        count_outcomes(total,"11110",obs,dates,dates[35],dates[36],sym)
         a=total[("train","BASE",1)]
         self.assertEqual(a["observed"],1)
         self.assertEqual(a["path_unknown"],1)
