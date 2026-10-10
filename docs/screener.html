@@ -52,8 +52,10 @@ function candles(entries,w=480,h=160,bracket=null){
  if(bracket){for(const [price,color,label] of [[bracket.stop,"#b33137","STOP"],[bracket.target,"#18724d","TARGET"]]){el("line",{x1:0,x2:w,y1:y(price),y2:y(price),stroke:color,"stroke-width":1.8,"stroke-dasharray":"6 4"});el("text",{x:4,y:Math.max(12,y(price)-3),fill:color,"font-size":12,"font-weight":"bold"}).textContent=label;}}
  return svg;
 }
-function chartPatterns(history){
- if(history.length<21)return [];
+function chartPatterns(history,marketDays){
+ if(history.length<21||marketDays.length<21)return [];
+ const tail=history.slice(-21),lastDays=marketDays.slice(-21);
+ if(lastDays.some((d,i)=>tail[i].Date!==d))return [];
  const n=history.length,closes=history.map(r=>val(r.AdjC||r.C)),volumes=history.map(r=>val(r.Vo));
  if(closes.some(v=>!Number.isFinite(v)||v<=0)||volumes.some(v=>!Number.isFinite(v)))return [];
  const now=closes[n-1],prev=closes[n-2],change=(now/prev-1)*100;
@@ -95,7 +97,7 @@ async function run(){
  chart.addEventListener("click",open);chart.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();open()}});
  const links=document.createElement("div");links.className="actions";const anchor=document.createElement("a");anchor.href=`https://finance.yahoo.co.jp/quote/${encodeURIComponent(code4(r.Code))}.T/chart`;anchor.target="_blank";anchor.rel="noopener noreferrer";anchor.textContent="最新の外部チャートを開く";links.append(anchor);
  const level=document.createElement("div");level.className="levels";
- const title=document.createElement("strong");const signals=chartPatterns(history);title.textContent="チャート形状："+(signals.length?signals.join("・"):"現在の簡易条件には該当なし");
+ const title=document.createElement("strong");const signals=chartPatterns(history,windowDays);title.textContent="チャート形状："+(signals.length?signals.join("・"):"現在の簡易条件には該当なし");
  const ref=document.createElement("div");const shares=Math.floor(budget/(r.last*1.001)/100)*100;
  ref.textContent="参考買値（保存済み終値） "+r.last.toFixed(2)+"円 ／ 仮想損切り "+bracket.stop.toFixed(2)+"円 ／ 仮想利益確定 "+bracket.target.toFixed(2)+"円";
  const risk=document.createElement("div");risk.textContent="参考株数 "+shares+"株（100株単位） ／ 想定価格差：損失 "+Math.round(r.last*stopPct/100*shares).toLocaleString("ja-JP")+"円・利益 "+Math.round(r.last*targetPct/100*shares).toLocaleString("ja-JP")+"円 ／ 利益幅÷損失幅 "+(targetPct/stopPct).toFixed(2)+"倍（手数料等を除く）";
