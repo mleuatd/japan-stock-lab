@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>日本株ラボ｜似たチャートの過去とその後</title>
+<style>
+:root{font:17px/1.7 system-ui,sans-serif;color:#162a42;background:#f7f9fc}
+*{box-sizing:border-box}main{max-width:1100px;margin:auto;padding:12px}
+h1{font-size:1.5rem}h2{font-size:1.15rem}fieldset{margin:16px 0;border:1px solid #adbdd1;border-radius:10px;padding:14px}
+label{display:inline-block;margin:4px 10px 8px 0}input,button,select,textarea{font:inherit;padding:8px;max-width:100%;border-radius:6px;border:1px solid #8c9db0}
+button{background:#174675;color:white;font-weight:600;cursor:pointer}
+button:disabled{background:#8996a8;cursor:default}
+button:focus-visible,input:focus-visible{outline:3px solid #efa84b;outline-offset:2px}
+#image{display:block;max-width:100%;height:auto;touch-action:manipulation;border:1px solid #b7c6d6}
+.notice{border-left:4px solid #92642d;padding:10px;background:#fdf6e6}
+#notice,#progress{display:block;margin:12px 0;font-weight:bold}
+table{width:100%;border-collapse:collapse;display:block;overflow-x:auto}
+th,td{border-bottom:1px solid #ced8e2;padding:9px;text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+.example{background:white;border:1px solid #d3dfed;border-radius:10px;padding:12px;margin:10px 0}
+.small{font-size:.92rem;color:#43556b}.chart{width:100%;height:auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:12px}
+.stat{background:white;padding:12px;border:1px solid #d3dfed;border-radius:9px}
+strong.value{font-size:1.4rem}
+</style></head>
+<body><main>
+<h1>似たチャート検索と、その後の騰落統計</h1>
+<p>「この形に似た過去の株価が、その後どれくらい上がったか・下がったか」を調べる研究機能です。
+似ている形の上昇割合は、将来の上昇確率や売買の保証ではありません。</p>
+<p class="notice">すべてこの端末内で処理し、チャート画像・元の株価データはGitHubに送信しません。日本株ラボの「ローカル株価検索」で日足CSV.gzを読み込んでから使用します。企業行動・分割・上場廃止などの検証は未完了です。</p>
+<fieldset><legend>1．探したいチャート形状を指定</legend>
+<p>方法A：チャートの画像を選び、値動きの折れ線を左から右へ順にタップします。最低3点必要です。ローソク足のスクリーンショットを自動で正確に復元する機能ではありません。</p>
+<label>画像ファイル <input id="file" type="file" accept="image/*"></label>
+<canvas id="image" width="960" height="440" role="img" aria-label="チャート画像。左から右へ価格の折れ線をタップして指定"></canvas>
+<small id="picked" role="status">指定した点：0点</small>
+<button id="clear" type="button">画像上の指定点を消去</button>
+<p>方法B：この端末に保存済みの株価から、過去20営業日のチャートを自動で参照します。</p>
+<label>証券コード <input id="code" inputmode="numeric" placeholder="例 7203"></label>
+<button id="fromCode" type="button">この銘柄のチャートを参照</button>
+<p>方法C：数値の時系列がある場合、カンマ区切りで貼り付けます（3点以上）。</p>
+<label>チャート数値 <textarea id="series" rows="3" style="width:min(95vw,780px)" placeholder="100,101,99,104,108,106"></textarea></label>
+<button id="fromSeries" type="button">入力数値を参照</button>
+</fieldset>
+<fieldset><legend>2．照合条件</legend>
+<label>参照する形の長さ <select id="lookback"><option>10</option><option selected>20</option><option>30</option><option>60</option></select>営業日</label>
+<label>類似事例の件数 <select id="top"><option>10</option><option selected>30</option><option>50</option><option>100</option></select></label>
+<label>対象期間の最終日 <input id="asof" type="date"></label>
+<p class="small">原データが揃う過去の事例だけを使用。5・10・20営業日後の価格が確定していない事例は除きます。近接する同一銘柄の似た区間は1つに絞ります。</p>
+<button id="run" type="button" disabled>類似チャートを検索</button>
+</fieldset>
+<output id="notice" aria-live="polite">参照曲線が未指定です。</output>
+<output id="progress" role="status">過去日足を読み込み待ち</output>
+<section aria-label="検索結果"><h2>過去の類似パターン、その後の上昇率</h2>
+<div id="stats" class="grid"></div>
+<div id="overall"></div><div id="examples"></div></section>
+<p class="small">上昇率は類似事例に占める上昇件数の割合で、売買約定や将来の上昇確率の推定ではありません。95%区間は標本比率についての参考値で、市場構造の変化・パターン探索の選択バイアスは反映しません。調整後終値を使用するため、過去時点の株式分割情報の問題が残ります。売買注文は出しません。</p>
+</main>
+<script>
+"use strict";
+const $=id=>document.getElementById(id), N=20, horizons=[5,10,20], maxFuture=20;
+let db,reference=null,screenshot=null,trace=[],pointsReady=false;
+function num(x){const n=Number(x);return x===null||x===undefined||x===""||!Number.isFinite(n)?NaN:n}
+function readStore(key){return new Promise((resolve,reject)=>{const tx=db.transaction("days","readonly"),r=tx.objectStore("days").get(key);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+function days(){return new Promise((resolve,reject)=>{const tx=db.transaction("days","readonly"),r=tx.objectStore("days").getAllKeys();r.onsuccess=()=>resolve(r.result.sort());r.onerror=()=>reject(r.error)})}
+async function rows(day){
+ const blob=await readStore(day);if(!blob)return [];
+ const raw=await new Response(blob.stream().pipeThrough(new DecompressionStream("gzip"))).text();
+ const lines=raw.trim().split(/\r?\n/),columns=lines.shift().split(",");
+ return lines.map(line=>{const v=line.split(",");return Object.fromEntries(columns.map((name,i)=>[name,v[i]??""]))});
+}
+function lerp(values,count=N){
+ if(values.length<3||values.some(v=>!Number.isFinite(v)))throw Error("数値は3点以上の有限数で指定してください");
+ return Array.from({length:count},(_,i)=>{const p=i*(values.length-1)/(count-1),l=Math.floor(p),r=Math.min(values.length-1,l+1);return values[l]+(values[r]-values[l])*(p-l)});
+}
+function fp(values){
+ const s=lerp(values),avg=s.reduce((a,b)=>a+b,0)/s.length;
+ const sd=Math.sqrt(s.reduce((a,b)=>a+(b-avg)**2,0)/s.length);
+ if(sd<1e-7)throw Error("変化がない直線は類似形状を判定できません");
+ return s.map(x=>(x-avg)/sd);
+}
+function dist(a,b){return Math.sqrt(a.reduce((sum,v,i)=>sum+(v-b[i])**2,0)/a.length)}
+function setReference(values,how){reference=fp(values);pointsReady=true;$("run").disabled=false;
+ $("notice").textContent="参照曲線を設定しました："+how+"。形状は価格や画像の縦軸スケールを除いて正規化します。";}
+function drawImage(){
+ const c=$("image"),ctx=c.getContext("2d");ctx.clearRect(0,0,c.width,c.height);
+ if(screenshot)ctx.drawImage(screenshot,0,0,c.width,c.height);
+ else {ctx.fillStyle="#edf2f7";ctx.fillRect(0,0,c.width,c.height);ctx.fillStyle="#364c62";ctx.font="25px sans-serif";ctx.fillText("チャート画像を選択してください",24,56)}
+ if(trace.length){ctx.beginPath();ctx.lineWidth=3;ctx.strokeStyle="#ff6725";trace.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.stroke();
+ trace.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,6,0,Math.PI*2);ctx.fillStyle="#e13d21";ctx.fill()})}
+ $("picked").textContent="指定した点："+trace.length+"点";
+}
+$("file").onchange=async()=>{const file=$("file").files[0];if(!file)return;const url=URL.createObjectURL(file);try{
+ screenshot=new Image();await new Promise((res,rej)=>{screenshot.onload=res;screenshot.onerror=rej;screenshot.src=url});
+ trace=[];drawImage();$("notice").textContent="画像を表示しました。左から右に値動きを3点以上タップしてください。";
+ }catch(e){$("notice").textContent="画像を読み取れませんでした："+e.message}finally{URL.revokeObjectURL(url)}};
+$("image").onclick=e=>{if(!screenshot)return;const rect=$("image").getBoundingClientRect();const x=(e.clientX-rect.left)*$("image").width/rect.width,y=(e.clientY-rect.top)*$("image").height/rect.height;
+ trace.push({x,y});trace.sort((a,b)=>a.x-b.x);drawImage();
+ if(trace.length>=3){try{const vals=lerpTrace(trace);setReference(vals,"画像で指定した"+trace.length+"点")}catch(err){$("notice").textContent=err.message}}
+};
+function lerpTrace(arr){const first=arr[0].x,last=arr[arr.length-1].x;if(last-first<10)throw Error("画像の左右に離れた位置を指定してください");return Array.from({length:N},(_,i)=>{const x=first+i*(last-first)/(N-1);let j=0;while(j<arr.length-2&&arr[j+1].x<x)j++;const p=arr[j],q=arr[j+1],t=(x-p.x)/(q.x-p.x);return -(p.y+(q.y-p.y)*t)})}
+$("clear").onclick=()=>{trace=[];drawImage();reference=null;$("run").disabled=true;$("notice").textContent="指定点を消去しました"};
+$("fromSeries").onclick=()=>{try{const values=$("series").value.trim().split(/[\s,、;]+/).filter(Boolean).map(num);setReference(values,"数値列")}catch(e){$("notice").textContent=e.message}};
+$("fromCode").onclick=async()=>{try{
+ const code=$("code").value.trim(),key=/^\d{4}$/.test(code)?code+"0":code;
+ const ds=(await days()).filter(d=>!$("asof").value||d<=$("asof").value).slice(-Number($("lookback").value));
+ if(ds.length<Number($("lookback").value))throw Error("必要な過去日数がありません");
+ const prices=[];for(const d of ds){const matched=(await rows(d)).find(r=>r.Code===key);const x=matched?num(matched.AdjC):NaN;if(!(x>0))throw Error("参照銘柄に欠損日があります："+d);prices.push(x)}
+ setReference(prices,"銘柄"+key+"の直近"+ds.length+"日");
+ }catch(e){$("notice").textContent="銘柄参照失敗："+e.message}};
+function wilson(w,n){if(!n)return null;const z=1.96,p=w/n,den=1+z*z/n,center=(p+z*z/(2*n))/den,half=z*Math.sqrt(p*(1-p)/n+z*z/(4*n*n))/den;return [Math.max(0,(center-half)*100),Math.min(100,(center+half)*100)]}
+function addCandidate(groups,code,record,span){
+ let list=groups.get(code);if(!list){list=[];groups.set(code,list)}
+ const overlapping=list.findIndex(old=>Math.abs(old.anchor-record.anchor)<span);
+ if(overlapping>=0){if(record.distance<list[overlapping].distance)list[overlapping]=record}
+ else {list.push(record);if(list.length>14){list.sort((a,b)=>a.distance-b.distance);list.length=14}}
+}
+function trendSVG(path,split){
+ const w=520,h=145,p=path.map(num);if(p.some(x=>!Number.isFinite(x)))return document.createTextNode("チャート不可");
+ const lo=Math.min(...p),hi=Math.max(...p),span=Math.max(.01,hi-lo);
+ const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("viewBox",`0 0 ${w} ${h}`);svg.setAttribute("role","img");svg.setAttribute("class","chart");svg.setAttribute("aria-label","類似した過去20営業日とその後20営業日の値動き。縦線より右がその後の結果");
+ const el=(tag,attr)=>{const e=document.createElementNS(svg.namespaceURI,tag);for(const [k,v] of Object.entries(attr))e.setAttribute(k,v);svg.append(e);return e};
+ const x=i=>10+i*(w-20)/(p.length-1),y=v=>10+(hi-v)/span*(h-20);
+ const d=p.map((v,i)=>(i?"L":"M")+x(i)+","+y(v)).join(" ");
+ el("path",{d,fill:"none",stroke:"#1c5c91","stroke-width":"2.2"});
+ const line=x(split);el("line",{x1:line,x2:line,y1:5,y2:h-5,stroke:"#ae632e","stroke-width":"2","stroke-dasharray":"5 4"});return svg;
+}
+function show(selected,eligible,observedDays){
+ const stats=$("stats");stats.replaceChildren();$("examples").replaceChildren();
+ for(const horizon of horizons){
+ const h=String(horizon),r=selected.map(s=>s.future[h]),n=r.length,up=r.filter(x=>x>0).length,down=r.filter(x=>x<0).length;
+ const interval=wilson(up,n),median=r.length?r.slice().sort((a,b)=>a-b)[Math.floor((n-1)/2)]:null;
+ const box=document.createElement("div");box.className="stat";
+ const h2=document.createElement("h2");h2.textContent=horizon+"営業日後";
+ const top=document.createElement("strong");top.className="value";top.textContent=n?(up/n*100).toFixed(1)+"% 上昇":"標本なし";
+ const p=document.createElement("p");p.textContent=`上昇${up}件・下落${down}件・横ばい${n-up-down}件／${n}件。上昇割合95%参考区間：${interval?interval.map(x=>x.toFixed(1)+"%").join("～"):"—"}。中央値：${median===null?"—":median.toFixed(2)+"%"}。`;
+ box.append(h2,top,p);stats.append(box)
+ }
+ $("overall").textContent=`検索済みの連続窓：約${eligible.toLocaleString("ja-JP")}件。独立性を高めるため、同一銘柄の重なる窓を間引いた上位${selected.length}件を表示。最終データ日：${observedDays.at(-1)}。似ている順は正規化価格曲線の距離を使用。`;
+ for(let i=0;i<selected.length;i++){
+ const s=selected[i],item=document.createElement("article");item.className="example";
+ const title=document.createElement("strong");title.textContent=`類似${i+1}位：${s.code} ／ ${s.date}時点 ／ 形状距離 ${s.distance.toFixed(3)}`;
+ const info=document.createElement("p");info.textContent=horizons.map(h=>`${h}日後：${s.future[h]>=0?"+":""}${s.future[h].toFixed(2)}%`).join("　");
+ item.append(title,info,trendSVG(s.path,s.cutIndex));$("examples").append(item)
+ }
+}
+async function run(){
+ if(!reference)return;
+ $("run").disabled=true;$("stats").replaceChildren();$("examples").replaceChildren();$("overall").textContent="";
+ try {
+ const dates=(await days()).filter(d=>!$("asof").value||d<=$("asof").value);
+ const lookback=Number($("lookback").value),total=lookback+maxFuture,top=Number($("top").value);
+ if(dates.length<total)throw Error("保存済み日足が足りません。検索する形の日数＋20営業日以上が必要です。");
+ const groups=new Map(),history=new Map();let eligible=0;
+ for(let i=0;i<dates.length;i++){
+  const rowsOfDay=await rows(dates[i]);
+  for(const r of rowsOfDay){
+   const price=num(r.AdjC);if(!(price>0))continue;
+   const code=r.Code;
+   let seq=history.get(code);if(!seq){seq=[];history.set(code,seq)}
+   if(seq.length&&seq[seq.length-1].i!==i-1)seq.length=0;
+   seq.push({i,price});
+   if(seq.length>total)seq.shift();
+   if(seq.length!==total)continue;
+   const pre=seq.slice(0,lookback),post=seq.slice(lookback),avg=pre[0].price;
+   const path=pre.map(v=>v.price);
+   let shape;try{shape=fp(path)}catch(_){continue}
+   eligible++;
+   const distance=dist(shape,reference),future={};
+   for(const n of horizons)future[n]=(seq[lookback-1+n].price/seq[lookback-1].price-1)*100;
+   addCandidate(groups,code,{code,date:dates[seq[lookback-1].i],anchor:seq[lookback-1].i,distance,future,cutIndex:lookback-1,path:seq.map(v=>v.price)},total);
+  }
+  if(i%12===0){$("progress").textContent=`照合中：${i+1}／${dates.length}営業日。参考窓 ${eligible.toLocaleString("ja-JP")}件`;await new Promise(resolve=>setTimeout(resolve,0))}
+ }
+ const arr=Array.from(groups.values()).flat().sort((a,b)=>a.distance-b.distance||a.code.localeCompare(b.code)||a.date.localeCompare(b.date)).slice(0,top);
+ show(arr,eligible,dates);
+ $("progress").textContent=`計算完了。類似${arr.length}件。勝率ではなく過去の上昇割合です。`;
+ }catch(e){$("progress").textContent="分析できませんでした："+e.message}
+ finally{$("run").disabled=!reference}
+}
+$("run").onclick=run;
+function openDB(){return new Promise((resolve,reject)=>{const r=indexedDB.open("japan-stock-lab",1);r.onupgradeneeded=()=>r.result.createObjectStore("days");r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}
+openDB().then(async v=>{db=v;drawImage();const d=await days();if(d.length){$("asof").value=d.at(-1);$("progress").textContent=d.length+"営業日分の保存データから過去の類似形状を検索できます"}else $("progress").textContent="保存済みのデータがありません。ローカル株価検索でCSV.gzを読み込んでください"}).catch(e=>$("progress").textContent="ローカルデータにアクセスできません："+e.message);
+</script></body></html>

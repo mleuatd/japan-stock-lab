@@ -8,6 +8,9 @@ on:
       - 'discover_patterns.py'
       - 'fast_strategy_grid.py'
       - 'chart_bracket.py'
+      - 'chart_similarity.py'
+      - 'tests/test_chart_similarity.py'
+      - 'docs/similarity.html'
       - 'tests/test_chart_bracket.py'
       - 'docs/screener.html'
       - 'february_walkforward.py'
@@ -52,3 +55,12 @@ jobs:
           Path("/tmp/chart-screener-test.cjs").write_text(script,encoding="utf-8")
           PY
           node --check /tmp/chart-screener-test.cjs
+      - name: Validate chart similarity screen JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html=Path("docs/similarity.html").read_text(encoding="utf-8")
+          script=html.split("<script>",1)[1].split("</script>",1)[0]
+          Path("/tmp/chart-similarity-test.cjs").write_text(script,encoding="utf-8")
+          PY
+          node --check /tmp/chart-similarity-test.cjs

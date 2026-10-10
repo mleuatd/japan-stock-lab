@@ -9,7 +9,8 @@ th:first-child,td:first-child{text-align:left}output{display:block;margin:.7rem 
 .note{background:#eaf0f8;padding:.8rem;border-radius:8px}
 </style></head><body><main><h1>日本株ラボ</h1>
 <p>検索条件はURLに保存できます。価格データは公開サーバーに送信せず、このブラウザー内で処理します。</p>
-<p><a href="screener.html">条件一致銘柄のカード一覧・日足チャート（試作）を開く</a></p>\n<section class="note"><strong>初回のみ：</strong>GitHub Actionsの非公開ダウンロードから、日付別 <code>.csv.gz</code> ファイルを選択してください（複数可）。読み込み済みデータはこの端末のブラウザー内に保存します。端末のストレージを消去すると再取り込みが必要です。</section>
+<p><a href="screener.html">条件一致銘柄のカード一覧・日足チャート（試作）を開く</a></p>
+<p><a href="similarity.html">チャート画像・銘柄から似た過去の形を探す／5・10・20営業日後の上昇割合と個別事例</a></p>\n<section class="note"><strong>初回のみ：</strong>GitHub Actionsの非公開ダウンロードから、日付別 <code>.csv.gz</code> ファイルを選択してください（複数可）。読み込み済みデータはこの端末のブラウザー内に保存します。端末のストレージを消去すると再取り込みが必要です。</section>
 <p><label>日足CSVファイル <input id="files" type="file" accept=".gz" multiple></label><button id="clear">保存データを消去</button></p>
 <output id="status" role="status">読み込み待ち</output>
 <fieldset><legend>検索条件</legend><label>基準日 <select id="date"></select></label>
