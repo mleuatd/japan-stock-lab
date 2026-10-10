@@ -11,6 +11,7 @@ import math
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+from jpx_market_risk import risk_as_of_close,risk_as_of_open
 
 @dataclass(frozen=True)
 class Bar:
@@ -83,6 +84,9 @@ def simulate(data,rule,initial_cash=500_000,allocation=0.1,fee_pct=0.0,hold_days
                 continue
             code=o["code"]
             if o["side"]=="BUY":
+                if risk_as_of_open(code,date):
+                    events.append(dict(date=date,code=code,side="BUY",action="SKIP_KNOWN_MARKET_RISK"))
+                    continue
                 if code in positions: continue
                 # Size from money available AT execution time; never assume unlimited liquidity.
                 budget=min(cash,initial_cash*allocation)
@@ -109,11 +113,15 @@ def simulate(data,rule,initial_cash=500_000,allocation=0.1,fee_pct=0.0,hold_days
         for code,pos in positions.items():
             if code in exits:
                 continue
+            if risk_as_of_close(code,date):
+                orders.append({"side":"SELL","code":code,"reason":"KNOWN_JPX_LISTING_RISK"})
+                exits.add(code)
+                continue
             if index-pos["index"]>=hold_days-1:
                 orders.append({"side":"SELL","code":code})
                 exits.add(code)
         for code,b in sorted(current.items()):
-            if code not in positions and code not in exits and rule_matches(history[code],rule):
+            if code not in positions and code not in exits and not risk_as_of_close(code,date) and rule_matches(history[code],rule):
                 orders.append({"side":"BUY","code":code})
         # Mark to market only using observable latest CLOSE, not future close.
         mtm=sum(pos["qty"]*current[code].close for code,pos in positions.items()
