@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS pattern_forward_stat (
 -- View: exactly one row per pattern/segment/run, day01..day30 are
 -- historically observed upward-fraction percentages, NOT forecast confidence.
 CREATE OR REPLACE VIEW pattern_up_30day AS
-SELECT r.run_key,r.model_version,r.segment,r.pattern_code,
+SELECT r.run_key,r.model_version,s.segment,s.pattern_code,
        p.pattern_name,r.validation_status,r.market_status_coverage,
   MAX(s.up_pct) FILTER (WHERE s.trading_days_after=1) AS day01,
   MAX(s.up_pct) FILTER (WHERE s.trading_days_after=2) AS day02,
@@ -84,6 +84,6 @@ FROM pattern_forward_stat s
 JOIN pattern_study_run r ON r.run_key=s.run_key
 JOIN pattern_definition p ON p.pattern_code=s.pattern_code
  AND p.model_version=s.model_version
-GROUP BY r.run_key,r.model_version,r.segment,r.pattern_code,p.pattern_name,
+GROUP BY r.run_key,r.model_version,s.segment,s.pattern_code,p.pattern_name,
          r.validation_status,r.market_status_coverage
-ORDER BY r.run_key,r.segment,r.pattern_code;
+ORDER BY r.run_key,s.segment,s.pattern_code;
