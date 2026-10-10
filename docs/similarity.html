@@ -112,7 +112,7 @@ function addCandidate(groups,code,record,span){
  if(overlapping>=0){if(record.distance<list[overlapping].distance)list[overlapping]=record}
  else {list.push(record);if(list.length>14){list.sort((a,b)=>a.distance-b.distance);list.length=14}}
 }
-function trendSVG(path){
+function trendSVG(path,split){
  const w=520,h=145,p=path.map(num);if(p.some(x=>!Number.isFinite(x)))return document.createTextNode("チャート不可");
  const lo=Math.min(...p),hi=Math.max(...p),span=Math.max(.01,hi-lo);
  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("viewBox",`0 0 ${w} ${h}`);svg.setAttribute("role","img");svg.setAttribute("class","chart");svg.setAttribute("aria-label","類似した過去20営業日とその後20営業日の値動き。縦線より右がその後の結果");
@@ -120,7 +120,7 @@ function trendSVG(path){
  const x=i=>10+i*(w-20)/(p.length-1),y=v=>10+(hi-v)/span*(h-20);
  const d=p.map((v,i)=>(i?"L":"M")+x(i)+","+y(v)).join(" ");
  el("path",{d,fill:"none",stroke:"#1c5c91","stroke-width":"2.2"});
- const line=x(N-1);el("line",{x1:line,x2:line,y1:5,y2:h-5,stroke:"#ae632e","stroke-width":"2","stroke-dasharray":"5 4"});return svg;
+ const line=x(split);el("line",{x1:line,x2:line,y1:5,y2:h-5,stroke:"#ae632e","stroke-width":"2","stroke-dasharray":"5 4"});return svg;
 }
 function show(selected,eligible,observedDays){
  const stats=$("stats");stats.replaceChildren();$("examples").replaceChildren();
@@ -138,7 +138,7 @@ function show(selected,eligible,observedDays){
  const s=selected[i],item=document.createElement("article");item.className="example";
  const title=document.createElement("strong");title.textContent=`類似${i+1}位：${s.code} ／ ${s.date}時点 ／ 形状距離 ${s.distance.toFixed(3)}`;
  const info=document.createElement("p");info.textContent=horizons.map(h=>`${h}日後：${s.future[h]>=0?"+":""}${s.future[h].toFixed(2)}%`).join("　");
- item.append(title,info,trendSVG(s.path));$("examples").append(item)
+ item.append(title,info,trendSVG(s.path,s.cutIndex));$("examples").append(item)
  }
 }
 async function run(){
@@ -165,7 +165,7 @@ async function run(){
    eligible++;
    const distance=dist(shape,reference),future={};
    for(const n of horizons)future[n]=(seq[lookback-1+n].price/seq[lookback-1].price-1)*100;
-   addCandidate(groups,code,{code,date:dates[seq[lookback-1].i],anchor:seq[lookback-1].i,distance,future,path:seq.map(v=>v.price)},total);
+   addCandidate(groups,code,{code,date:dates[seq[lookback-1].i],anchor:seq[lookback-1].i,distance,future,cutIndex:lookback-1,path:seq.map(v=>v.price)},total);
   }
   if(i%12===0){$("progress").textContent=`照合中：${i+1}／${dates.length}営業日。参考窓 ${eligible.toLocaleString("ja-JP")}件`;await new Promise(resolve=>setTimeout(resolve,0))}
  }
