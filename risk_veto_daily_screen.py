@@ -127,7 +127,7 @@ def judge_symbol(symbol,bars,required_days,rule_result):
                 min(float(bar["open_price"]),float(bar["close_price"]))<=
                 max(float(bar["open_price"]),float(bar["close_price"]))<=
                 float(bar["high_price"]))
-    if not all(complete(r) for r in bars[-2:]):
+    if not all(complete(r) for r in bars):
         return {"symbol":symbol,"status":"UNKNOWN_INVALID_CANDLES",
                 "veto":[],"observed_patterns":[]}
     if not all(r.get("adjusted_close") is not None and
@@ -201,7 +201,40 @@ def retrieve_rule_stats(conn):
           (run[0],HORIZON))
         columns=[x.name for x in cur.description]
         rows=[dict(zip(columns,r)) for r in cur.fetchall()]
-    return select_veto_patterns(rows,run[1],run[2])
+    result=select_veto_patterns(rows,run[1],run[2])
+    result["source_run_key"]=run[0]
+    return result
+
+def primary_gate_verdict(rows,as_of):
+    """Require both daily and 30-session-spaced historical improvement.
+
+    If any evidence is stale, absent, inconclusive or negative, do not
+    produce cleared research candidates. Even an improvement is NOT proof of
+    future safety, and never grants brokerage approval.
+    """
+    by={sample:(verdict,source_day) for sample,verdict,source_day in rows}
+    if set(by)!= {"daily","spaced30"}:
+        return "PRIMARY_RISK_AUDIT_MISSING_NO_SCREEN"
+    if any(source_day!=as_of for verdict,source_day in by.values()):
+        return "PRIMARY_RISK_AUDIT_STALE_NO_SCREEN"
+    if any(verdict!="IMPROVED_HISTORICALLY_NOT_PROSPECTIVELY_VALIDATED"
+           for verdict,source_day in by.values()):
+        return "PRIMARY_LOSS_RATE_FAILED_NO_SCREEN"
+    return "PRIMARY_RESEARCH_IMPROVEMENT_ONLY"
+
+def retrieve_primary_gate(conn,source_run_key,as_of):
+    """Use the latest persisted audit for the identical source model run."""
+    with conn.cursor() as cur:
+        cur.execute("""SELECT e.sampling,e.primary_objective_result,
+                              u.latest_source_day
+                       FROM risk_veto_union_effectiveness_20day e
+                       JOIN risk_veto_union_run u USING(run_key)
+                       WHERE u.run_key=(
+                         SELECT run_key FROM risk_veto_union_run
+                         WHERE source_run_key=%s ORDER BY created_at DESC LIMIT 1
+                       )""",(source_run_key,))
+        rows=[(sample,verdict,day.isoformat()) for sample,verdict,day in cur]
+    return primary_gate_verdict(rows,as_of)
 
 def retrieve_current(conn):
     with conn.cursor() as cur:
@@ -275,8 +308,15 @@ def main():
                       "today":args.today,"rows":[],"ready_to_buy":0}
         else:
             rules=retrieve_rule_stats(conn)
-            calendar,rows=retrieve_current(conn)
-            snapshot=build_shortlist(rows,calendar,rules,args.today)
+            primary_gate=retrieve_primary_gate(conn,rules["source_run_key"],last)
+            if primary_gate!="PRIMARY_RESEARCH_IMPROVEMENT_ONLY":
+                snapshot={"state":primary_gate,"as_of":last,
+                          "today":args.today,"rows":[],"ready_to_buy":0,
+                          "rule_count":len(rules["rules"]),
+                          "research_candidates":0}
+            else:
+                calendar,rows=retrieve_current(conn)
+                snapshot=build_shortlist(rows,calendar,rules,args.today)
         if args.write_db:save(conn,snapshot)
     if args.out:
         Path(args.out).write_text(json.dumps(snapshot,ensure_ascii=False,indent=2),
