@@ -88,7 +88,9 @@ def main():
         raise SystemExit("Missing DATABASE_URL")
     with psycopg.connect(os.environ["DATABASE_URL"], sslmode="require") as conn:
         blocked, actions, quality = fetch_audited_actions(conn)
-    raw = load_private_neon() # private 1.9m J-Quants records, NEVER published
+    # Only Jan 2026 onward is required for the fixed 3-day entry lookback.
+    # A bounded SQL query avoids the unnecessary ~1.3m earlier price rows.
+    raw = load_private_neon(since="2026-01-01") # private prices, NEVER published
     data = {d: {code: bar for code, bar in bars.items()
                 if code not in blocked} for d, bars in raw.items()}
     results = calculate(data, actions)
