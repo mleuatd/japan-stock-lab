@@ -8,6 +8,7 @@ import argparse
 import datetime as dt
 import json
 from chart_bracket import Bracket
+from jpx_market_risk import risk_as_of_close
 from pathlib import Path
 from walkforward_backtest import load_bars, rule_matches
 
@@ -61,6 +62,7 @@ def build_plan(data,account,rule,as_of=None,max_age_days=7,max_buy_candidates=5,
     budget_left=cash
     buy_budget=float(rule.get("max_new_position_yen",100000))
     for code,bar in sorted(data[last].items()):
+        if risk_as_of_close(code,last):continue
         if code in holdings or bar.volume<=0 or not rule_matches(history[code],rule):
             continue
         if len([o for o in result["orders"] if o["side"]=="BUY_CASH"])>=max_buy_candidates:break
