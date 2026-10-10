@@ -82,7 +82,10 @@ async function run(){
  if(!(stopPct>0&&stopPct<100&&targetPct>0&&targetPct<=100&&budget>=0&&budget<=500000&&holdDays>=1&&holdDays<=365))throw Error("損切り・利益確定・予算・保有日数の設定を確認してください");
  const matches=latest.map(r=>{const last=val(r.C),p=prior.get(r.Code),change=p>0?(last/p-1)*100:NaN;return {...r,last,change}}).filter(r=>Number.isFinite(r.change)&&r.change>=threshold&&val(r.Vo)>=minVol&&r.last>=minPrice).sort((a,b)=>b.change-a.change);
  $("progress").textContent=`条件に合致：${matches.length.toLocaleString("ja-JP")}銘柄　／　表示：${Math.min(limit,matches.length)}銘柄`;
- $("scope").textContent=`スクリーニング基準日：${date}。画像はこの日を終点とする最大約1か月（22取引日）の日足です。直近の未取得期間は対象外。`;
+ const age=Math.floor((Date.now()-new Date(date+"T00:00:00").getTime())/86400000);
+ const historicalOnly=age>7||age<0;
+ $("scope").textContent=`スクリーニング基準日：${date}（${age}暦日前）。最大22取引日の日足。 `+
+ (historicalOnly?"データ鮮度が不十分：現在の購入判断・発注に利用不可。過去の研究例のみ。":"当日の価格と約定可否は別途確認が必要です。");
  if(!matches.length)return;
  const visible=matches.slice(0,limit),windowDays=days.slice(-22);
  const histories=new Map(visible.map(r=>[r.Code,[]]));
@@ -101,7 +104,7 @@ async function run(){
  const ref=document.createElement("div");const shares=Math.floor(budget/(r.last*1.001)/100)*100;
  ref.textContent="参考買値（保存済み終値） "+r.last.toFixed(2)+"円 ／ 仮想損切り "+bracket.stop.toFixed(2)+"円 ／ 仮想利益確定 "+bracket.target.toFixed(2)+"円";
  const risk=document.createElement("div");risk.textContent="参考株数 "+shares+"株（100株単位） ／ 想定価格差：損失 "+Math.round(r.last*stopPct/100*shares).toLocaleString("ja-JP")+"円・利益 "+Math.round(r.last*targetPct/100*shares).toLocaleString("ja-JP")+"円 ／ 利益幅÷損失幅 "+(targetPct/stopPct).toFixed(2)+"倍（手数料等を除く）";
- const caution=document.createElement("div");caution.className="caution";caution.textContent="仮想注文のみ・最大"+holdDays+"営業日。翌営業日の始値・約定可否・値幅制限・注文対応状況を要再確認。チャートパターンだけでは購入を保証できません。";
+ const caution=document.createElement("div");caution.className="caution";caution.textContent=(historicalOnly?"データが古いため現在の購入候補ではありません。 ":"")+"仮想注文のみ・最大"+holdDays+"営業日。翌営業日の始値・約定可否・値幅制限・注文対応状況を要再確認。パターン別勝率は未検証。";
  level.append(title,ref,risk,caution);card.append(head,chart,level,links);$("cards").append(card);
  }
 }
