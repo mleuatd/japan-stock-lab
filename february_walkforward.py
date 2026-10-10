@@ -92,7 +92,7 @@ def frozen_train(data,cutoff,min_events=25):
     eligible.sort(key=lambda p:p[0],reverse=True)
     return eligible
 
-def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation=100000,hold_days=5,fee_rate=.001,corporate_actions=None,slippage_rate=0.0,tax_rate=0.0,max_positions=5,stop_loss_pct=None,take_profit_pct=None,trailing_stop_pct=None):
+def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation=100000,hold_days=5,fee_rate=.001,corporate_actions=None,slippage_rate=0.0,tax_rate=0.0,max_positions=5,stop_loss_pct=None,take_profit_pct=None,trailing_stop_pct=None,take_profit_band=None,max_hold_at_open=False):
     """Long-only historical paper account. Corporate events must be supplied explicitly.
 
     corporate_actions: {date: {code: {"split_ratio": positive number,
@@ -109,6 +109,17 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
     if not all(v is None or (isinstance(v,(int,float)) and 0 < v < float("inf"))
                for v in (stop_loss_pct,take_profit_pct,trailing_stop_pct)):
         raise ValueError("Exit percentage thresholds must be positive and finite")
+    if take_profit_band is not None:
+        if (not isinstance(take_profit_band,(tuple,list))
+                or len(take_profit_band)!=2
+                or any(not isinstance(x,(int,float)) or not math.isfinite(x)
+                       for x in take_profit_band)
+                or not 0 < take_profit_band[0] < take_profit_band[1] < 100):
+            raise ValueError("Invalid closing-profit band")
+        if take_profit_pct is not None:
+            raise ValueError("Profit band cannot be combined with profit threshold")
+    if not isinstance(max_hold_at_open,bool):
+        raise ValueError("max_hold_at_open must be bool")
     corporate_actions=corporate_actions or {}
     dates=sorted(data)
     if cutoff not in dates: raise ValueError("Cutoff trading session missing")
@@ -234,8 +245,14 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
             close=observed.close
             pos["peak_close"]=max(peak,close)
             reason=None
-            if n-pos["index"]>=hold_days-1:
+            # Day-30 OPEN exits require a queue from day-29 CLOSE.
+            # Existing frozen legacy backtests keep their original timing.
+            if n-pos["index"] >= hold_days-(2 if max_hold_at_open else 1):
                 reason="MAX_HOLD"
+            elif (take_profit_band is not None
+                  and take_profit_band[0] <=
+                      100*(close/entry-1) < take_profit_band[1]):
+                reason="TAKE_PROFIT_BAND"
             elif stop_loss_pct is not None and close<=entry*(1-stop_loss_pct/100):
                 reason="STOP_LOSS"
             elif take_profit_pct is not None and close>=entry*(1+take_profit_pct/100):
