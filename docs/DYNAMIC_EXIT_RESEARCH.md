@@ -53,3 +53,28 @@ ORDER BY segment,policy;
 `dynamic_exit_day`：方策・銘柄群・区分ごとの「売却営業日」分布。出力は特定の証券口座に対する売買指示ではありません。
 
 **注意**：これは現時点の価格の鮮度・企業行動が確認されるまで `NOT_APPROVED`。過去データの中に有効な損切りルールが存在したとしても、将来の損失回避を保証しません。
+
+## 訓練期間だけから作る「損失回避 vs 利益」効率境界
+
+sql/014_dynamic_exit_train_tradeoff_frontier.sql は新しい大規模スキャンを行わず、既存の TRAIN_A と TRAIN_B のペア比較集計だけから、両方の訓練期間での保守的な最小改善幅（worst fold）を算出する。HOLDOUTは採択・パレート集合の計算には利用しない。
+
+例（2026-10-10、同じ仮想売買機会をペアで比較）:
+
+| 訓練での条件 | 最低・損失発生率改善幅 | 最低・平均損益改善幅 | 最低・大幅損失回避 |
+|---|---:|---:|---:|
+| +2%利益確定 | +8.807ポイント | -2.2142ポイント | +2.635ポイント |
+| +5%利益確定 | +2.705ポイント | -1.1723ポイント | +0.803ポイント |
+| +10%利益確定 | +0.437ポイント | -0.3925ポイント | +0.113ポイント |
+| 30営業日まで保有 | 0 | 0 | 0 |
+
+各政策単独の損失率とは分母が異なる可能性があるので混同しない。いずれも損失確率を下げる一方、学習期間の平均正味損益を減らしたため、厳格な「両方改善」の採択条件には合格していない。損失回避と平均利益が何ポイント交換されるかを示すだけで、**パレート集合は検証成功・購入推薦を意味しない**。
+
+照会:
+
+    SELECT policy,worst_train_loss_prevention_pp,worst_train_mean_return_gain_pp,
+           worst_train_severe5_prevention_pp,tradeoff_kind,on_two_objective_frontier
+    FROM dynamic_exit_train_tradeoff_frontier
+    WHERE run_key=(SELECT run_key FROM dynamic_exit_run ORDER BY created_at DESC LIMIT 1)
+    ORDER BY worst_train_loss_prevention_pp DESC;
+
+次段階の課題: 新条件を検証結果を見て後付けで増やすと過剰適合するため、必ず条件を先に定義して未使用の期間で検証する。早期売却した資金の再投資効果は今回の単一売買モデルには含めていない。資金制約付きポートフォリオ検証が別途必要。
