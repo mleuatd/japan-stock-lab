@@ -11,10 +11,11 @@
 | `personal_fund_estimated_purchase` | Modeled monthly cash contributions, assumed investment date, NAV/10k units, theoretical and adjusted units, and source reference |
 | `personal_fund_recurring_plan` | Recorded monthly plan; may not imply an actual executed purchase |
 | `personal_fund_annual_estimate` | Historical asset values from reconstructed old Excel |
+| `personal_fund_inferred_cashflow` | Principal increase evidenced by snapshots; September bucket is **tentative**, while actual execution date/units stay NULL |
 | `personal_fund_snapshot` | Archived image-based observations: receipt date separate from actual valuation date |
 | `personal_fund_position` | Fund-by-fund position balances, acquisition principal, unrealized gain/loss and source |
 
-Useful read-only views: `personal_fund_monthly_chart`, `personal_fund_yearly_chart`, `personal_fund_asset_history_for_chart`, `personal_fund_position_change`, `personal_fund_snapshot_summary`.
+Useful read-only views: `personal_fund_monthly_chart`, `personal_fund_yearly_chart`, `personal_fund_asset_history_for_chart`, `personal_fund_position_change`, `personal_fund_snapshot_summary`, `personal_fund_monthly_cashflow_chart`.
 
 **Important:** Historical contributions were inferred in the old Excel by applying recurring-plan assumptions to historical fund NAVs and then calibrating modeled units to observed account balances. These rows are **not executed broker transactions**. Model inputs include interpolated fund NAVs, adjusted estimated units and assumed purchase dates (some dates may be non-trading days). They must never be presented as independently verified executions. Do not backfill missing actual unit holdings from the statement's return percentage.
 
@@ -37,6 +38,7 @@ To inspect the current holdings in Neon without exporting files:
 ```sql
 SELECT * FROM personal_fund_snapshot_summary ORDER BY received_on DESC;
 SELECT * FROM personal_fund_monthly_chart ORDER BY purchased_month;
+SELECT * FROM personal_fund_monthly_cashflow_chart ORDER BY period_month;
 SELECT * FROM personal_fund_asset_history_for_chart ORDER BY month_key;
 SELECT * FROM personal_fund_position_change ORDER BY account_group,fund_code;
 ```
