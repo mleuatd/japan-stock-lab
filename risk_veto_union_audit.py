@@ -93,16 +93,17 @@ def future_outcomes(t, normalized, horizons=HORIZONS, fee=FEE_PER_SIDE):
     Intraday low thresholds indicate exposures, not executable stop fills.
     """
     first = normalized.get(t + 1)
-    entry = first[2] if first is not None else None
+    # An OPEN without positive traded volume cannot be assumed to fill.
+    entry = first[2] if first is not None and first[1] > 0 else None
     low = math.inf
     path_ok = True
     for h in horizons:
         row = normalized.get(t + h)
-        if row is None or row[4] is None:
+        if row is None or row[4] is None or row[1] <= 0:
             path_ok = False
         else:
             low = min(low, row[4])
-        if row is None or entry is None or row[0] is None:
+        if row is None or row[1] <= 0 or entry is None or row[0] is None:
             yield h, None
             continue
         net = net_pct(entry, row[0], fee)
