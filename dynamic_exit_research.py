@@ -66,6 +66,13 @@ def valid_session(row, require_close=True):
     return True
 
 
+def valid_open(row):
+    """No day-30 high, low or closing mark can influence an OPEN exit."""
+    return (row is not None and row[1] > 0 and row[2] is not None
+            and isinstance(row[2], (int, float))
+            and math.isfinite(row[2]) and row[2] > 0)
+
+
 def replay_exit(t, normalized, policy, fee=FEE_PER_SIDE):
     """Enter next market OPEN; EOD exit signals fill *following* OPEN.
 
@@ -86,12 +93,14 @@ def replay_exit(t, normalized, policy, fee=FEE_PER_SIDE):
     pending = None
     for h in range(1, MAX_HOLD + 1):
         row = normalized.get(t + h)
-        if not valid_session(row):
-            return None
         if pending or h == MAX_HOLD:
+            if not valid_open(row):
+                return None
             return {"net": net_pct(entry, row[2], fee), "day": h,
                     "reason": pending or "MAX_HOLD_OPEN",
                     "entry": entry, "exit": row[2]}
+        if not valid_session(row):
+            return None
         close = row[0]
         gross = (close / entry - 1) * 100
         peak_close = max(peak_close, close)
