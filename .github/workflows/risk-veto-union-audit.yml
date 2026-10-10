@@ -1,0 +1,36 @@
+name: Audit survivor losses after union of TRAIN-only veto patterns
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'risk_veto_union_audit.py'
+      - 'tests/test_risk_veto_union_audit.py'
+      - 'sql/010_risk_veto_union_audit.sql'
+      - '.github/workflows/risk-veto-union-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: private-neon-veto-union-audit
+  cancel-in-progress: false
+jobs:
+  private-historical-union:
+    runs-on: ubuntu-latest
+    timeout-minutes: 85
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test independent selection and full-cohort accounting
+        run: python -m unittest discover -s tests -p 'test_risk_veto_union_audit.py' -v
+      - name: Install private Neon PostgreSQL driver
+        run: python -m pip install 'psycopg[binary]>=3,<4'
+      - name: Compute and store retrospective union comparison
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          test -n "$DATABASE_URL" || { echo "::error::Private DATABASE_URL missing"; exit 1; }
+          python risk_veto_union_audit.py --write-db --test-start 2026-02-02 --source-commit "$GITHUB_SHA"
+      - name: Explain approval state
+        run: echo 'Historical retrospective research only. Never an order or BUY approval.'
