@@ -139,23 +139,26 @@ def report(totals,market_days,train_end,holdout_start,source="private_daily_bar"
                     train_end,holdout_start,str(COOLDOWN)])).encode()
     ).hexdigest()[:32]
     rows=[]
-    for (segment,tag,h),s in sorted(totals.items()):
-        n=s["observed"]
-        up=s["up"];down=s["down"];flat=s["flat"]
-        assert up+down+flat==n
-        lo,hi=wilson(up,n)
-        events=n+s["missing"]+s["unmatured"]
-        rows.append({
-            "segment":segment,"pattern_code":tag,"trading_days_after":h,
-            "events":events,"observed":n,"missing":s["missing"],
-            "unmatured":s["unmatured"],"up":up,"down":down,"flat":flat,
-            "up_pct":round(100*up/n,3) if n else None,
-            "down_pct":round(100*down/n,3) if n else None,
-            "avg_return_pct":round(s["return_sum"]/n,5) if n else None,
-            "up_wilson_lower_pct":lo,"up_wilson_upper_pct":hi,
-            "evidence_status":("INSUFFICIENT_SAMPLE" if n<100
-                               else "HISTORICAL_DESCRIPTIVE_UNVERIFIED")
-        })
+    for segment in ("train","holdout"):
+        for tag in DEFINITIONS:
+            for h in HORIZONS:
+                s=totals.get((segment,tag,h),new_counter())
+                n=s["observed"]
+                up=s["up"];down=s["down"];flat=s["flat"]
+                assert up+down+flat==n
+                lo,hi=wilson(up,n)
+                events=n+s["missing"]+s["unmatured"]
+                rows.append({
+                    "segment":segment,"pattern_code":tag,"trading_days_after":h,
+                    "events":events,"observed":n,"missing":s["missing"],
+                    "unmatured":s["unmatured"],"up":up,"down":down,"flat":flat,
+                    "up_pct":round(100*up/n,3) if n else None,
+                    "down_pct":round(100*down/n,3) if n else None,
+                    "avg_return_pct":round(s["return_sum"]/n,5) if n else None,
+                    "up_wilson_lower_pct":lo,"up_wilson_upper_pct":hi,
+                    "evidence_status":("INSUFFICIENT_SAMPLE" if n<100
+                                       else "HISTORICAL_DESCRIPTIVE_UNVERIFIED")
+                })
     return {"version":VERSION,"run_key":key,"source_last_date":market_days[-1],
             "source_first_date":market_days[0],
             "train_end":train_end,"holdout_start":holdout_start,
