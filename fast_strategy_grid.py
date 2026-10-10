@@ -7,6 +7,7 @@ import argparse, json, math
 from collections import defaultdict
 from walkforward_backtest import load_bars
 from february_walkforward import load_private_neon
+from jpx_market_risk import risk_as_of_close,risk_as_of_open
 
 def prepare(data):
     days=sorted(data)
@@ -61,7 +62,7 @@ def replay(data,days,features,buy,sell,from_date,to_date,initial=500000,per_posi
     cash=float(initial);positions={};queue=[];trades=[];equity=[]
     if start>0:
         pd=days[start-1]
-        queue=[("BUY",code) for code in sorted(data[pd]) if buy_rule(features[pd].get(code),buy)]
+        queue=[("BUY",code) for code in sorted(data[pd]) if not risk_as_of_close(code,pd) and buy_rule(features[pd].get(code),buy)]
     for i in range(start,stop):
         date=days[i];bars=data[date]
         for side,code in sorted(queue,key=lambda v:0 if v[0]=="SELL" else 1):
@@ -73,6 +74,7 @@ def replay(data,days,features,buy,sell,from_date,to_date,initial=500000,per_posi
                     proceeds=p["qty"]*b.open*(1-fee);cash+=proceeds
                     trades.append({"date":date,"side":"SELL","code":code,"qty":p["qty"],"price":b.open,"pnl":proceeds-p["cost"]})
             else:
+                if risk_as_of_open(code,date):continue
                 if code in positions:continue
                 budget=min(cash,per_position)
                 qty=int(budget/(b.open*(1+fee))//lot)*lot
@@ -83,10 +85,10 @@ def replay(data,days,features,buy,sell,from_date,to_date,initial=500000,per_posi
         if cash < -0.001:raise AssertionError("Borrowing is forbidden")
         # All decisions for next open are made exactly once at close.
         queue=[("SELL",code) for code,p in positions.items()
-               if sell_rule(features[date].get(code),p,i,sell)]
+               if risk_as_of_close(code,date) or sell_rule(features[date].get(code),p,i,sell)]
         selling={code for side,code in queue}
         queue += [("BUY",code) for code in sorted(bars)
-                  if code not in positions and code not in selling and buy_rule(features[date].get(code),buy)]
+                  if code not in positions and code not in selling and not risk_as_of_close(code,date) and buy_rule(features[date].get(code),buy)]
         # Use most recently observable close for marking held stock; missing price => unknown.
         valid_closes = {code: bars[code].close for code in positions
                         if code in bars and math.isfinite(bars[code].close) and bars[code].close > 0}

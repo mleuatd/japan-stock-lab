@@ -7,6 +7,7 @@ from collections import defaultdict, deque
 from statistics import mean
 from walkforward_backtest import Bar,load_bars,rule_matches
 from paper_ledger_accounting import reconcile
+from jpx_market_risk import risk_as_of_close,risk_as_of_open
 
 CUTOFF="2026-01-30"
 START="2026-02-02"
@@ -56,6 +57,7 @@ def frozen_train(data,cutoff,min_events=25):
         if segment==0 and idx+2>=split:
             continue
         for code,b in bars.items():
+            if risk_as_of_close(code,day):continue
             b1=tomorrow.get(code)
             b2=after.get(code)
             if (b1 is None or b2 is None or b1.open<=0
@@ -125,6 +127,8 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                        if "cash_dividend_per_share" in event and "entitlement_date" in event}
     realized_pnl=0.0
     known_dividends=0.0
+    risk_buy_skips=0
+    risk_sell_requests=0
     for n,day in enumerate(dates):
         bars=data[day]
         # Process entitlement at the close of the supplied trading session,
@@ -187,6 +191,11 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                                    "signal_reason":order.get("reason","UNKNOWN"),
                                    "tax":round(tax,2),"realized_pnl":round(received-pos["cost"],2),"net_credit":received})
                 else:
+                    # Do not fill a queued BUY after a known risk notice, even
+                    # if the signal preceded the notice.
+                    if risk_as_of_open(code,day):
+                        risk_buy_skips+=1
+                        continue
                     if code in positions or len(positions)>=max_positions:continue
                     limit=min(cash,allocation)
                     execution_price=b.open*(1+slippage_rate)
@@ -209,6 +218,13 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
         exiting={order["code"] for order in pending_sell_retries}
         for code,pos in positions.items():
             if code in exiting:continue
+            # A published listing-risk notice creates an EXIT request for
+            # the next observable open. Never fabricate the actual fill.
+            if risk_as_of_close(code,day):
+                queue.append({"side":"SELL","code":code,"reason":"KNOWN_JPX_LISTING_RISK"})
+                exiting.add(code)
+                risk_sell_requests+=1
+                continue
             observed=bars.get(code)
             if observed is None or not math.isfinite(observed.close) or observed.close<=0:
                 # Unknown quote cannot trigger a paper exit using a future price.
@@ -242,6 +258,9 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
                     or history[-1-lookback].date != dates[n-lookback]):
                 continue
             if not rule_matches(history,rule):
+                continue
+            if risk_as_of_close(code,day):
+                risk_buy_skips+=1
                 continue
             strength=(history[-1].adj_close/history[-1-lookback].adj_close-1)*100
             ranked.append((-strength,code))
@@ -309,6 +328,11 @@ def replay(data,rule,cutoff=CUTOFF,start=START,initial=500000,lot=100,allocation
     cash_and_shares_check=reconcile(initial,ledger,positions,cash)
     return {"cash":round(cash,2),"held":positions,"fills":ledger,"equity":daily,
             "ledger_audit":cash_and_shares_check,
+            "listing_risk_screen":{"source":"VERIFIED_JPX_SUBSET",
+               "historical_universe_coverage":"INCOMPLETE",
+               "buy_signals_or_fills_skipped":risk_buy_skips,
+               "risk_exit_requests":risk_sell_requests,
+               "warning":"Only three manually verified JPX histories included; no comprehensive as-of market registry."},
             "final_equity":known_values[-1] if known_values else None,
             "realized_pnl":round(realized_pnl,2),
             "unrealized_pnl":round(unrealized,2) if unrealized is not None else None,
