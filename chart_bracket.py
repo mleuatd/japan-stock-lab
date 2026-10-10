@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import date
 from fast_strategy_grid import BUY, buy_rule, prepare
 from walkforward_backtest import load_bars
+from jpx_market_risk import risk_as_of_close,risk_as_of_open
 
 PATTERN_LOOKBACK={"dip":5,"momentum":20,"breakout":20,"reversal":20,"volume":5}
 CONFIGS=tuple((stop,target,days) for stop in (3,5,8)
@@ -64,7 +65,7 @@ def pattern_signals(data,days,features,index,pattern):
     latest=data[day]
     ranked=[]
     for code,bar in latest.items():
-        if not complete_bar(bar):continue
+        if not complete_bar(bar) or risk_as_of_close(code,day):continue
         if any(code not in data[days[j]] for j in range(index-lb,index+1)):
             continue  # Sparse observations are not consecutive market sessions.
         feature=features[day].get(code)
@@ -109,7 +110,7 @@ def backtest(data,days,features,pattern,bracket,start,end,initial=500000,
                           "pnl":round(proceeds-pos["cost"],2)})
             del held[code];time_orders.discard(code)
         for code in pending:
-            if code in held or len(held)>=max_positions:continue
+            if code in held or len(held)>=max_positions or risk_as_of_open(code,day):continue
             b=bars.get(code)
             if not complete_bar(b):continue
             budget=min(cash,per_position)
@@ -133,7 +134,8 @@ def backtest(data,days,features,pattern,bracket,start,end,initial=500000,
                 ambiguous_bars+=1
             outcome=paired_exit(b,pos["entry"],bracket,first_session=i==pos["index"])
             if outcome is None:
-                if i-pos["index"]>=bracket.max_hold_sessions-1:
+                if (risk_as_of_close(code,day) or
+                        i-pos["index"]>=bracket.max_hold_sessions-1):
                     time_orders.add(code)  # Executes NEXT open; no lookahead.
                 continue
             why,px=outcome
