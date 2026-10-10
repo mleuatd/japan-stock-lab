@@ -1,4 +1,4 @@
--- Private derived daily research snapshot; NOT broker orders, no licensed OHLCV.
+-- Private derived daily research snapshot - NOT broker orders, no licensed OHLCV.
 CREATE TABLE IF NOT EXISTS risk_veto_scan_run (
  as_of date PRIMARY KEY,
  scan_state text NOT NULL,
