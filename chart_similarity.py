@@ -76,7 +76,7 @@ def find_matches(data, reference, lookback=20, horizons=HORIZONS,
         for code,bar in data[day].items():
             if _valid_price(bar):
                 by_code[code].append((i,bar.adj_close))
-    scored=[]
+    shortlist=defaultdict(list)
     eligible=0
     for code,history in by_code.items():
         if skip_code is not None and code==skip_code:
@@ -98,21 +98,26 @@ def find_matches(data, reference, lookback=20, horizons=HORIZONS,
             for horizon in horizons:
                 finish=full[lookback-1+horizon][1]
                 future[str(horizon)]=round((finish/at-1)*100,4)
-            scored.append((distance,code,history[end][0],future))
-    scored.sort(key=lambda row:(row[0],row[1],row[2]))
-    selected=[]
-    anchors=defaultdict(list)
-    # Avoid the same company's highly-overlapping patterns dominating results.
-    min_separation=lookback+max_h
-    for distance,code,anchor,future in scored:
-        if any(abs(anchor-prev)<min_separation for prev in anchors[code]):
-            continue
-        anchors[code].append(anchor)
-        selected.append({"code":code,"match_date":days[anchor],
-                         "shape_distance":round(distance,6),
-                         "future_returns_pct":future})
-        if len(selected)>=top_k:
-            break
+            anchor=history[end][0]
+            local=shortlist[code]
+            gap=lookback+max_h
+            overlap=[old for old in local if abs(old[1]-anchor)<gap]
+            if overlap:
+                if all(distance<old[0] for old in overlap):
+                    for old in overlap:local.remove(old)
+                else:
+                    continue
+            local.append((distance,anchor,future))
+            if len(local)>20:
+                local.sort(key=lambda v:v[0])
+                del local[20:]
+    candidates=sorted(
+        ((distance,code,anchor,future) for code,local in shortlist.items()
+         for distance,anchor,future in local),
+        key=lambda row:(row[0],row[1],row[2]))
+    selected=[{"code":code,"match_date":days[anchor],
+               "shape_distance":round(distance,6),"future_returns_pct":future}
+              for distance,code,anchor,future in candidates[:top_k]]
     stats={}
     for h in horizons:
         returns=[r["future_returns_pct"][str(h)] for r in selected]
