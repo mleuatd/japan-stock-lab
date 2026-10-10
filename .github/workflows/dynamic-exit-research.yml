@@ -1,0 +1,36 @@
+name: Research daily stop-loss/profit exits through session 30
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'dynamic_exit_research.py'
+      - 'tests/test_dynamic_exit_research.py'
+      - 'sql/013_dynamic_exit_research.sql'
+      - '.github/workflows/dynamic-exit-research.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: private-neon-dynamic-exit-research
+  cancel-in-progress: false
+jobs:
+  private-adaptive-exit-research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 85
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test daily stop exits, gap-loss accounting and train/holdout split
+        run: python -m unittest discover -s tests -p 'test_dynamic_exit_research.py' -v
+      - name: Install private Neon PostgreSQL driver
+        run: python -m pip install 'psycopg[binary]>=3,<4'
+      - name: Research fixed 23 exit policies using private Neon prices
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          test -n "$DATABASE_URL" || { echo "::error::Private DATABASE_URL missing"; exit 1; }
+          python dynamic_exit_research.py --write-db --train-split 2025-07-01 --source-commit "$GITHUB_SHA"
+      - name: Explain research-only state
+        run: echo 'Retrospective historical research, no brokerage orders, no BUY/SELL approvals.'
