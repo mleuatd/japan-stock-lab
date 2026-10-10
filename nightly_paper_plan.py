@@ -7,13 +7,15 @@ Both sides are next-session *candidates*, not executable orders.
 import argparse
 import datetime as dt
 import json
+from chart_bracket import Bracket
 from pathlib import Path
 from walkforward_backtest import load_bars, rule_matches
 
-def build_plan(data,account,rule,as_of=None,max_age_days=7,max_buy_candidates=5,lot_size=100,fee_pct=0):
+def build_plan(data,account,rule,as_of=None,max_age_days=7,max_buy_candidates=5,lot_size=100,fee_pct=0,stop_pct=5,target_pct=10):
     if not data: raise ValueError("No data")
     if not (0 <= fee_pct < 1 and lot_size >= 1 and max_buy_candidates >= 0):
         raise ValueError("Invalid settings")
+    bracket=Bracket(stop_pct,target_pct)
     last=max(data)
     now=dt.date.fromisoformat(as_of) if as_of else dt.date.today()
     days_old=(now-dt.date.fromisoformat(last)).days
@@ -23,11 +25,25 @@ def build_plan(data,account,rule,as_of=None,max_age_days=7,max_buy_candidates=5,
         raise ValueError("Margin or short positions are not supported")
     result={"as_of":now.isoformat(),"last_observed_session":last,"data_age_days":days_old,
             "initial_cash":cash,"stale":days_old>max_age_days or days_old<0,
-            "orders":[],"warnings":[],"mode":"PAPER_PREVIEW_ONLY",
+            "orders":[],"held_exit_templates":[],"warnings":[],"mode":"PAPER_PREVIEW_ONLY",
             "allowed":["BUY_CASH","SELL_HELD"],"forbidden":["SHORT","FUTURES","MARGIN","REAL_ORDER"]}
     if result["stale"]:
         result["warnings"].append("Last available close is stale or in the future: NO live-order candidates.")
         return result
+    # One paired exit describes only shares already in the supplied holdings.
+    # It is NOT two independent full-quantity stock sell orders.
+    for code,pos in sorted(holdings.items()):
+        entry=float(pos.get("entry_price",0))
+        if entry<=0:continue
+        stop,target=bracket.prices(entry)
+        result["held_exit_templates"].append({
+            "code":code,"qty":int(pos["qty"]),
+            "reference_paid_price":entry,
+            "stop_trigger_reference":round(stop,4),
+            "take_profit_limit_reference":round(target,4),
+            "kind":"OCO_PAIRED_SELL_PREVIEW_ONLY",
+            "not_executed":True,
+            "note":"Requires broker support and available owned shares; prices/ticks may need adjustment."})
     # Only open share balances supplied by the user can ever be proposed for sale.
     hold_days=int(rule.get("max_hold_calendar_days",0))
     for code,pos in sorted(holdings.items()):
@@ -53,9 +69,17 @@ def build_plan(data,account,rule,as_of=None,max_age_days=7,max_buy_candidates=5,
         if quantity<lot_size:continue
         reserved=quantity*bar.close*(1+fee_pct)
         budget_left-=reserved
+        stop,target=bracket.prices(bar.close)
         result["orders"].append({"side":"BUY_CASH","code":code,"qty":quantity,
                                  "reference_close":bar.close,"estimated_cost":round(reserved,2),
-                                 "reason":"screening_rule","not_executed":True})
+                                 "reason":"screening_rule","not_executed":True,
+                                 "paired_sell_after_buy":{
+                                     "kind":"IFD_OCO_ILLUSTRATION_ONLY",
+                                     "activate":"ONLY_AFTER_CONFIRMED_BUY_FILL",
+                                     "stop_trigger_reference":round(stop,4),
+                                     "take_profit_limit_reference":round(target,4),
+                                     "qty_if_filled":quantity,
+                                     "reference_entry_is_not_actual_fill":True}})
     result["warnings"].append("Next-session opening prices may differ; recheck cash, order size and tradability before any real manual order.")
     return result
 

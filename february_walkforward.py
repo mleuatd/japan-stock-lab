@@ -17,12 +17,14 @@ def load_private_neon():
     data=defaultdict(dict)
     with psycopg.connect(u,sslmode="require") as con:
         with con.cursor(name="chronological_backtest") as cur:
-            cur.execute("""SELECT trading_date,security_code,open_price,close_price,volume,adjusted_close
+            cur.execute("""SELECT trading_date,security_code,open_price,close_price,volume,adjusted_close,high_price,low_price
             FROM daily_bar ORDER BY trading_date,security_code""")
-            for date,code,o,c,v,a in cur:
+            for date,code,o,c,v,a,h,l in cur:
                 if None in (o,c,v,a) or not all(math.isfinite(float(x)) for x in (o,c,v,a)) or min(o,c,a)<=0 or v<0:continue
                 day=date.isoformat()
-                data[day][code]=Bar(day,code,float(o),float(c),int(v),float(a))
+                data[day][code]=Bar(day,code,float(o),float(c),int(v),float(a),
+                    float(h) if h is not None else None,
+                    float(l) if l is not None else None)
     return dict(sorted(data.items()))
 
 def candidate_rules():

@@ -7,6 +7,9 @@ on:
       - 'nightly_paper_plan.py'
       - 'discover_patterns.py'
       - 'fast_strategy_grid.py'
+      - 'chart_bracket.py'
+      - 'tests/test_chart_bracket.py'
+      - 'docs/screener.html'
       - 'february_walkforward.py'
       - 'tests/test_february_priority.py'
       - 'tests/test_february_walkforward.py'
@@ -40,3 +43,12 @@ jobs:
           python-version: '3.12'
       - name: Test lookahead, next-session execution, missing prices, fees
         run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Validate chart screener JavaScript syntax
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text = Path("docs/screener.html").read_text(encoding="utf-8")
+          script = text.split("<script>",1)[1].split("</script>",1)[0]
+          Path("/tmp/chart-screener-test.cjs").write_text(script,encoding="utf-8")
+          PY
+          node --check /tmp/chart-screener-test.cjs

@@ -20,6 +20,8 @@ class Bar:
     close: float
     volume: int
     adj_close: float
+    high: float | None = None
+    low: float | None = None
 
 def load_bars(root):
     bydate=defaultdict(dict)
@@ -28,10 +30,15 @@ def load_bars(root):
             for r in csv.DictReader(fh):
                 try:
                     b=Bar(r["Date"],r["Code"],float(r["O"]),float(r["C"]),
-                          int(float(r["Vo"])),float(r["AdjC"]))
+                          int(float(r["Vo"])),float(r["AdjC"]),
+                          float(r["H"]) if r.get("H") else None,
+                          float(r["L"]) if r.get("L") else None)
                 except (ValueError,TypeError):
                     continue
-                if (b.date!=path.name[:10] or not all(math.isfinite(value) and value>0 for value in (b.open,b.close,b.adj_close)) or b.volume<0):
+                if (b.date!=path.name[:10] or not all(math.isfinite(value) and value>0 for value in (b.open,b.close,b.adj_close)) or b.volume<0 or (b.high is not None and not math.isfinite(b.high))
+                        or (b.low is not None and not math.isfinite(b.low))
+                        or (b.high is not None and b.high < max(b.open,b.close))
+                        or (b.low is not None and b.low > min(b.open,b.close))):
                     continue
                 bydate[b.date][b.code]=b
     return dict(sorted(bydate.items()))
