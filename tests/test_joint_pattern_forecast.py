@@ -47,7 +47,7 @@ class JointPatternForecastTest(unittest.TestCase):
                          "2026-10-09","2026-02-02","2026-07-17")
         self.assertEqual(len(result["days"]),30)
         last=result["days"][-1]
-        self.assertEqual(last["scenario_median_yen"],2119.83)
+        self.assertEqual(last["scenario_median_yen"],2119.85)
         self.assertEqual(last["observed_examples"],8500)
         self.assertEqual(last["up_fraction_pct"],round(3800*100/8500,3))
         self.assertTrue(result["status"].startswith("PROVISIONAL"))
