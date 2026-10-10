@@ -237,6 +237,8 @@ def retrieve_primary_gate(conn,source_run_key,as_of):
     return primary_gate_verdict(rows,as_of)
 
 def retrieve_current(conn):
+    from split_adjustment_guard import inspect_guard
+    blocked, _ = inspect_guard(conn)
     with conn.cursor() as cur:
         cur.execute("""SELECT trading_date FROM
           (SELECT DISTINCT trading_date FROM daily_bar
@@ -252,6 +254,8 @@ def retrieve_current(conn):
           ORDER BY security_code,trading_date""",(days[0],days[-1]))
         tickers=defaultdict(list)
         for code,day,adj,op,hi,lo,close,vol in cur:
+            if code in blocked:
+                continue
             tickers[code].append({
                 "day":day.isoformat(),
                 "adjusted_close":float(adj) if adj is not None else None,

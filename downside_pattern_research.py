@@ -13,6 +13,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from jpx_market_risk import risk_as_of_close
+from split_adjustment_guard import inspect_guard
 
 VERSION="downside-conditions-v2"
 HORIZONS=range(1,31)
@@ -318,6 +319,7 @@ def analyze(data,train_end="2026-01-30",holdout_start="2026-02-02"):
     return summarize(totals,symbols,dates[0],dates[-1],train_end,holdout_start)
 
 def from_neon(conn,train_end,holdout_start):
+    split_blocked, split_summary = inspect_guard(conn)
     with conn.cursor() as cur:
         cur.execute("SELECT DISTINCT trading_date FROM daily_bar ORDER BY trading_date")
         dates=[row[0].isoformat() for row in cur]
@@ -331,6 +333,8 @@ def from_neon(conn,train_end,holdout_start):
                        FROM daily_bar ORDER BY security_code,trading_date""")
         active=None;one=[]
         for code,day,adj,op,hi,lo,close,vol in cur:
+            if code in split_blocked:
+                continue
             if active is not None and code!=active:
                 count_outcomes(totals,active,one,dates,train_end,holdout_start,symbols)
                 processed+=1
@@ -348,6 +352,7 @@ def from_neon(conn,train_end,holdout_start):
             processed+=1
     result=summarize(totals,symbols,dates[0],dates[-1],train_end,holdout_start)
     result["symbols_scanned"]=processed
+    result["corporate_action_guard"]=split_summary
     return result
 
 def main():
@@ -374,6 +379,7 @@ def main():
         "pattern_count":result["pattern_count"],
         "aggregate_rows":len(result["rows"]),
         "symbols_scanned":result["symbols_scanned"],
-        "stored":args.write_db,"coverage":result["source_coverage"]},
+        "stored":args.write_db,"coverage":result["source_coverage"],
+        "corporate_action_guard":result["corporate_action_guard"]},
         ensure_ascii=False))
 if __name__=="__main__":main()

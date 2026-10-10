@@ -16,6 +16,7 @@ from datetime import date
 from pathlib import Path
 
 from downside_pattern_research import CATALOG, adjusted, detect
+from split_adjustment_guard import inspect_guard
 from jpx_market_risk import risk_as_of_close
 from risk_veto_daily_screen import (
     METRICS, TRAIN_MIN, UNIQUE_MIN, MAX_MISSING_RATE,
@@ -218,6 +219,7 @@ def read_train_rules(conn):
 
 
 def from_neon(conn, test_start=TEST_START):
+    blocked, split_summary = inspect_guard(conn)
     source, holdout_start, rules = read_train_rules(conn)
     if test_start < holdout_start:
         raise ValueError("Test would overlap the model TRAIN period")
@@ -243,6 +245,8 @@ def from_neon(conn, test_start=TEST_START):
                               open_price,high_price,low_price,close_price,volume
                        FROM daily_bar ORDER BY security_code,trading_date""")
         for code, day, adj, op, hi, lo, close, vol in cur:
+            if code in blocked:
+                continue
             if active is not None and code != active:
                 evaluate_one(active, obs, days, first_t, len(days)-31,
                              veto_codes, accum, perf, snapshot, len(days)-31)
@@ -262,6 +266,7 @@ def from_neon(conn, test_start=TEST_START):
             scanned += 1
     return {
         "source_run_key": source, "rules": rules, "scanned_symbols": scanned,
+        "corporate_action_guard": split_summary,
         "signal_start": days[first_t], "signal_end": days[-31],
         "last_data_day": days[-1], "cohorts": dict(accum["cohorts"]),
         "unknown_signals": dict(accum["unknown_signals"]),
@@ -272,7 +277,8 @@ def from_neon(conn, test_start=TEST_START):
 def store(conn, result, commit_sha):
     identity = "|".join((result["source_run_key"], commit_sha,
                          result["signal_start"], result["signal_end"],
-                         str(FEE_PER_SIDE)))
+                         str(FEE_PER_SIDE),
+                         result["corporate_action_guard"]["guard_version"]))
     run_key = hashlib.sha256(identity.encode()).hexdigest()[:32]
     statements = Path("sql/010_risk_veto_union_audit.sql").read_text(
         encoding="utf8").split(";")
@@ -342,6 +348,7 @@ def main():
         "test_end": result["signal_end"], "last_source_day": result["last_data_day"],
         "trained_rule_count": len(result["rules"]),
         "source_run_key": result["source_run_key"],
+        "corporate_action_guard": result["corporate_action_guard"],
         "snapshot_counts": dict(__import__("collections").Counter(x[2] for x in result["snapshot"])),
         "loss20_daily": {cohort: rate(result["cohorts"].get(("daily", cohort, 20), fresh_bucket()))
                          for cohort in ("ALL", "EXCLUDED", "SURVIVOR")},
