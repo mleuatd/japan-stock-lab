@@ -51,6 +51,13 @@ class UnionResearchTests(unittest.TestCase):
         self.assertLess(out[3]["path"], -5)
         self.assertLess(net_pct(100, 100), 0)
 
+    def test_zero_volume_open_is_not_an_executable_trade(self):
+        normalized = {1: (100, 0, 100, 101, 98),
+                      2: (95, 1000, 95, 100, 90)}
+        outcomes = dict(future_outcomes(0, normalized, range(1, 3)))
+        self.assertIsNone(outcomes[1])
+        self.assertIsNone(outcomes[2])
+
     def test_missing_path_is_unknown_not_safe(self):
         normalized = {1: (100, 1000, 100, 101, 98),
                       2: (102, 1000, 100, 103, None),
