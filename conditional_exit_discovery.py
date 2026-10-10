@@ -209,8 +209,12 @@ def discover(episodes):
     independent factor (distinct feature families), with TRAIN_B used only
     to assess replication. No threshold optimization from later data.
     """
-    a = episodes.get(("TRAIN_A", "SURVIVOR"), [])
-    b = episodes.get(("TRAIN_B", "SURVIVOR"), [])
+    # IMPORTANT: prior veto classifiers were fitted using the entire old
+    # 2024..Jan-2026 training era. Subsetting TRAIN_A by SURVIVOR therefore
+    # injects information from future TRAIN_B. Discover ONLY on unfiltered
+    # point-in-time complete-chart episodes (ALL); leave SURVIVOR descriptive.
+    a = episodes.get(("TRAIN_A", "ALL"), [])
+    b = episodes.get(("TRAIN_B", "ALL"), [])
     if not a or not b:
         return {"selected": None, "state": "INSUFFICIENT_TRAIN_EPISODES",
                 "investable": False}, []
@@ -335,7 +339,7 @@ def report(episodes, unknown):
             daily[(seg, cohort)] = describe_conditional_day(episodes, seg, cohort)
     if decision["selected"]:
         decision["holdout"] = summarize_effect(effects.get(
-            ("HOLDOUT", "SURVIVOR", decision["selected"]), {}))
+            ("HOLDOUT", "ALL", decision["selected"]), {}))
     return {"decision": decision, "rule_labels": {n: (
         " AND ".join(FEATURES[p][1] for p in n.split(" & "))
         if " & " in n else FEATURES[n][1]) for n in predicates},
