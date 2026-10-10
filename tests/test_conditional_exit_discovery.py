@@ -99,20 +99,34 @@ class ExplainableStateTests(unittest.TestCase):
            for _ in range(180)]
         hold=[(+2.,[(BIT["AGE_01_05"]|BIT["PNL_LOSS2_5"],-10.,2)])
               for _ in range(180)]
-        episodes={("TRAIN_A","SURVIVOR"):a,("TRAIN_B","SURVIVOR"):b,
-                  ("HOLDOUT","SURVIVOR"):hold}
+        episodes={("TRAIN_A","ALL"):a,("TRAIN_B","ALL"):b,
+                  ("HOLDOUT","ALL"):hold}
         before,_=discover(episodes)
         self.assertTrue(before["selected"])
         self.assertEqual(before["state"],
                          "REPEATED_ANY_LOSS_REDUCTION_RETROSPECTIVE_ONLY")
-        episodes[("HOLDOUT","SURVIVOR")]=[(-5.,[(0,+30.,2)])]*10000
+        episodes[("HOLDOUT","ALL")]=[(-5.,[(0,+30.,2)])]*10000
         after,_=discover(episodes)
         self.assertEqual(before,after)
+
+    def test_future_veto_filter_cannot_change_training_selection(self):
+        # A model fitted using later training months may label SURVIVOR after
+        # the fact. The primary discovery result must ignore that cohort.
+        a = [(-3., [(BIT["AGE_01_05"], 1.5, 2)]) for _ in range(180)]
+        later = [(-3., [(BIT["AGE_01_05"], 1.5, 2)]) for _ in range(180)]
+        episodes = {("TRAIN_A","ALL"): a, ("TRAIN_B","ALL"): later,
+                    ("TRAIN_A","SURVIVOR"): [], ("TRAIN_B","SURVIVOR"): []}
+        before, _ = discover(episodes)
+        self.assertIsNotNone(before["selected"])
+        episodes[("TRAIN_A","SURVIVOR")] = [(5., [(BIT["AGE_01_05"], -9., 2)])]*999
+        episodes[("TRAIN_B","SURVIVOR")] = [(5., [(BIT["AGE_01_05"], -9., 2)])]*999
+        after, _ = discover(episodes)
+        self.assertEqual(before, after)
 
     def test_second_factor_cannot_form_a_contradiction(self):
         a=[(-2.,[(BIT["AGE_01_05"]|BIT["PNL_LOSS2_5"],+1.,2)])
            for _ in range(180)]
-        z={("TRAIN_A","SURVIVOR"):a,("TRAIN_B","SURVIVOR"):a}
+        z={("TRAIN_A","ALL"):a,("TRAIN_B","ALL"):a}
         chosen,_=discover(z)
         # A combined candidate is permitted only across two feature families.
         if " & " in chosen["selected"]:
