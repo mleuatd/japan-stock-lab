@@ -5,7 +5,8 @@ from pathlib import Path
 def store(conn,result):
     key=hashlib.sha256((
         result["version"]+"|"+result["first_day"]+"|"+result["last_day"]+"|"+
-        result["train_end"]+"|"+result["holdout_start"]
+        result["train_end"]+"|"+result["holdout_start"]+"|"+
+        result.get("corporate_action_guard",{}).get("guard_version","legacy_unchecked")
     ).encode()).hexdigest()[:32]
     with conn.transaction():
         with conn.cursor() as cur:
