@@ -101,6 +101,13 @@ class DailyRiskVetoTests(unittest.TestCase):
         s=select_veto_patterns(sample_stats(),"APPROVED","JPX_LISTING_RISK_INCOMPLETE")
         self.assertEqual(s["rules"],[])
         self.assertEqual(s["state"],"INCOMPATIBLE_MODEL")
+    def test_ddl_statements_do_not_expose_sql_comment_fragments(self):
+        from pathlib import Path
+        ddl=Path("sql/009_risk_veto_watchlist.sql").read_text(encoding="utf8")
+        statements=[line.strip() for line in ddl.split(";") if line.strip()]
+        self.assertEqual(len(statements),4)
+        self.assertTrue(all("CREATE " in stmt for stmt in statements))
+
     def test_ci_is_broad_for_small_sample(self):
         lower,upper=wilson(7,10)
         self.assertLess(lower,70)
