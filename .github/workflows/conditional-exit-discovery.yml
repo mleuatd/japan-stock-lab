@@ -1,0 +1,38 @@
+name: Explainable daily-held-position conditional rule discovery
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'conditional_exit_discovery.py'
+      - 'tests/test_conditional_exit_discovery.py'
+      - 'sql/016_conditional_exit_discovery.sql'
+      - '.github/workflows/conditional-exit-discovery.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: private-neon-conditional-exit-discovery
+  cancel-in-progress: false
+jobs:
+  private-reasoned-exit-discovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 85
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify causal states, gap fills, train-only rule construction
+        run: |
+          python -m unittest discover -s tests -p 'test_conditional_exit_discovery.py' -v
+          python -m unittest discover -s tests -p 'test_split_adjustment_guard.py' -v
+      - name: Install secure PostgreSQL driver
+        run: python -m pip install 'psycopg[binary]>=3,<4'
+      - name: Explain day1-28 risk and discover conditional exit decisions
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          test -n "$DATABASE_URL" || { echo "::error::Private DATABASE_URL missing"; exit 1; }
+          python conditional_exit_discovery.py --write-db --source-commit "$GITHUB_SHA"
+      - name: Keep exploratory results private and unapproved
+        run: echo 'Private Neon aggregates only. No stock prices, automatic orders or trading approval.'
