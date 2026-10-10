@@ -30,3 +30,9 @@ Secretsの存在はワークフロー実行時に値を表示せず検証でき�
 新規：`chart_bracket.py` で押し目・上昇トレンド・上放れ・反転・出来高急増の買いシグナル5種類と、損切り/利益確定/保有日数の組合せ135通りを時系列で検証。`docs/screener.html` では、端末内に取り込んだ日足のローソク足に、仮の損切り・利益確定ラインと100株単位の参考予算を重ねます。注文は一切行いません。価格と分割/配当の検証が済むまで成績は暫定です。
 
 詳しい注文条件、ギャップ損失、損切り優先の判定、利用方法：[docs/CHART_BRACKET_STRATEGIES.md](docs/CHART_BRACKET_STRATEGIES.md)。
+
+## 過去チャートのパターン別「1～30営業日後」分析
+
+`pattern_forward_stats.py` と Neon の `pattern_forward_stat` に、16種類の基本パターン別に1～30営業日後の上昇・下落・横ばいの件数、上昇割合、平均騰落率、欠損件数などを保存します。表示用ビュー `pattern_up_30day` には `day01` ～ `day30` を配置（毎日の割合は当日終値と**基準日終値**の比較）。学習期間と検証期間を分け、同銘柄の重複する未来30日間の事例は集計対象を間引きます。初回実行は「Pattern forward outcomes」GitHub Actions。結果は検証未完了の過去統計であり、確かな予測確率・売買勝率ではありません。
+
+詳細：[docs/PATTERN_FORWARD_30.md](docs/PATTERN_FORWARD_30.md)。
