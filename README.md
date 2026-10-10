@@ -36,3 +36,7 @@ Secretsの存在はワークフロー実行時に値を表示せず検証でき�
 `pattern_forward_stats.py` と Neon の `pattern_forward_stat` に、16種類の基本パターン別に1～30営業日後の上昇・下落・横ばいの件数、上昇割合、平均騰落率、欠損件数などを保存します。表示用ビュー `pattern_up_30day` には `day01` ～ `day30` を配置（毎日の割合は当日終値と**基準日終値**の比較）。学習期間と検証期間を分け、同銘柄の重複する未来30日間の事例は集計対象を間引きます。初回実行は「Pattern forward outcomes」GitHub Actions。結果は検証未完了の過去統計であり、確かな予測確率・売買勝率ではありません。
 
 詳細：[docs/PATTERN_FORWARD_30.md](docs/PATTERN_FORWARD_30.md)。
+
+## 今の銘柄の「複数パターン同時該当」から30営業日後までを比較
+
+`joint_pattern_forecast.py` は、最新21営業日のチャートで該当したパターン全体の交差条件をNeon履歴に適用し、各1～30営業日後の実測上昇割合と中央値の株価シナリオを返します。単独のパターン上昇率を足したり平均したりする誤りを避けます。最新21営業日のデータは別途必要で、Neon無料2か月遅延分だけから現在の株価を推測しません。説明：[docs/JOINT_PATTERN_FORECAST.md](docs/JOINT_PATTERN_FORECAST.md)。
