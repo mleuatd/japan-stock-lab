@@ -23,6 +23,10 @@ def load_private_neon(since=None):
     data=defaultdict(dict)
     with psycopg.connect(u,sslmode="require") as con:
         with con.cursor(name="chronological_backtest") as cur:
+            # psycopg defaults to ~100 rows/FETCH; this 2026 private feed
+            # otherwise requires thousands of high-latency database roundtrips.
+            # No change to data/order/indicator semantics, only I/O batch size.
+            cur.itersize = 15000
             sql = """SELECT trading_date,security_code,open_price,close_price,volume,adjusted_close,high_price,low_price
             FROM daily_bar"""
             params = ()
