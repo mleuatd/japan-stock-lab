@@ -57,6 +57,38 @@ LEFT JOIN LATERAL (
   LIMIT 1
 ) prior ON TRUE
 """
+GAP_SQL = """
+WITH params AS (SELECT %s::date AS final_day),
+holdings AS (SELECT unnest(%s::text[]) AS code),
+missing AS (
+  SELECT h.code FROM holdings h CROSS JOIN params p
+  LEFT JOIN daily_bar d
+    ON d.security_code=h.code AND d.trading_date=p.final_day
+  WHERE d.security_code IS NULL OR d.close_price IS NULL OR d.close_price<=0
+)
+SELECT
+ COUNT(*) AS missing_final_holdings,
+ COUNT(*) FILTER (WHERE q.last_valid_date IS NULL) AS no_prior_valid_close,
+ COUNT(*) FILTER (WHERE p.final_day-q.last_valid_date BETWEEN 0 AND 7) AS prior_close_age_0_to_7_days,
+ COUNT(*) FILTER (WHERE p.final_day-q.last_valid_date BETWEEN 8 AND 30) AS prior_close_age_8_to_30_days,
+ COUNT(*) FILTER (WHERE p.final_day-q.last_valid_date > 30) AS prior_close_age_over_30_days,
+ COUNT(*) FILTER (WHERE r.last_row_date > q.last_valid_date
+                   OR (q.last_valid_date IS NULL AND r.last_row_date IS NOT NULL))
+                   AS later_unpriced_rows_after_last_valid_close,
+ MIN(p.final_day-q.last_valid_date) AS min_prior_close_age_days,
+ MAX(p.final_day-q.last_valid_date) AS max_prior_close_age_days
+FROM missing m CROSS JOIN params p
+LEFT JOIN LATERAL (
+  SELECT trading_date AS last_valid_date FROM daily_bar b
+  WHERE b.security_code=m.code AND b.trading_date<p.final_day AND b.close_price>0
+  ORDER BY b.trading_date DESC LIMIT 1
+) q ON TRUE
+LEFT JOIN LATERAL (
+  SELECT trading_date AS last_row_date FROM daily_bar b
+  WHERE b.security_code=m.code AND b.trading_date<p.final_day
+  ORDER BY b.trading_date DESC LIMIT 1
+) r ON TRUE
+"""
 EXPOSURE_SQL = """
 WITH intervals AS (
   SELECT code,start_date,end_date
@@ -72,7 +104,7 @@ JOIN daily_bar b ON b.security_code=i.code
     AND b.trading_date BETWEEN i.start_date AND i.end_date
 """
 
-def summarize(result, final_stats, exposure_stats, windows):
+def summarize(result, final_stats, exposure_stats, windows, gap_stats=None):
     paper=result["paper_result"]
     diagnostics=paper["valuation_diagnostics"]
     stats={k:int(v or 0) for k,v in final_stats.items()}
@@ -80,6 +112,22 @@ def summarize(result, final_stats, exposure_stats, windows):
     if stats["held"] != len(paper["held"]):
         raise AssertionError("Portfolio holdings count differs from DB lookup")
     missing=stats["absent_final_row"]+stats["invalid_final_close"]
+    gap = {k:(int(v) if v is not None else None)
+           for k,v in (gap_stats or {}).items()}
+    if gap_stats:
+        if gap["missing_final_holdings"] != missing:
+            raise AssertionError("Final-price gap counts disagree")
+        known_age = sum(gap[k] for k in (
+            "prior_close_age_0_to_7_days",
+            "prior_close_age_8_to_30_days",
+            "prior_close_age_over_30_days"))
+        if known_age + gap["no_prior_valid_close"] != missing:
+            raise AssertionError("Last-quote age buckets do not reconcile")
+    blockers = ["CORPORATE_ACTION_AND_DELISTING_EVIDENCE_UNVERIFIED"]
+    if missing:
+        blockers.append("HELD_FINAL_QUOTE_MISSING")
+    if exposure["unusual_factor_rows"] or exposure["unknown_factor_rows"]:
+        blockers.append("EXPOSURE_ADJUSTMENT_FACTORS_REQUIRE_REVIEW")
     return {
         "experiment":"PRIOR_SELECTED_RULE_REPLAY_UNVERIFIED",
         "last_date":result["data_last_date"],
@@ -95,9 +143,10 @@ def summarize(result, final_stats, exposure_stats, windows):
         "exposed_symbols_with_unusual_factor":exposure["exposed_symbols_with_factor"],
         "exposure_unknown_factor_rows":exposure["unknown_factor_rows"],
         "formal_final_equity_available":paper["final_equity"] is not None,
-        "validation_status":"BLOCKED_EXTERNAL_DATA" if missing or exposure["unusual_factor_rows"]
-             or exposure["unknown_factor_rows"] else "PROVISIONAL_UNVERIFIED",
-        "limitation":"No security-level quotes, verified event registry, or brokerage execution evidence; all return figures provisional."
+        "missing_final_holding_gap_provenance":gap if gap_stats else None,
+        "blocking_reasons":blockers,
+        "validation_status":"BLOCKED_EXTERNAL_DATA",
+        "limitation":"An adjustment factor of 1 or absence of unusual factors cannot verify corporate actions or delisting. Prior prices are NOT final prices; no verified event registry or brokerage execution evidence."
     }
 
 def audit(conn, result):
@@ -121,7 +170,10 @@ def audit(conn, result):
         cur.execute(EXPOSURE_SQL,(codes,starts,ends))
         keys=[c.name for c in cur.description]
         exposure_stats=dict(zip(keys,cur.fetchone()))
-    return summarize(result, final_stats, exposure_stats, windows)
+        cur.execute(GAP_SQL,(final_day,list(held)))
+        keys=[c.name for c in cur.description]
+        gap_stats=dict(zip(keys,cur.fetchone()))
+    return summarize(result, final_stats, exposure_stats, windows, gap_stats)
 
 def main():
     parser=argparse.ArgumentParser()
