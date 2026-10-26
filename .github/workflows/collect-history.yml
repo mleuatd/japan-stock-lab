@@ -83,9 +83,18 @@ jobs:
           # Source coverage is at most two years (~524 weekdays), so 30x20 is sufficient.
           # Each day commits independently; existing imports are skipped.
           # neon_import.py stops before any new day when DB >= 700MB.
+          # Avoid repeatedly scanning every completed day once all archive days are processed.
           for batch in $(seq 1 30); do
             echo "Incremental Neon import batch $batch of 30"
-            python neon_import.py --root archive/daily --max-days 20 --apply
+            batch_log="$(mktemp)"
+            python neon_import.py --root archive/daily --max-days 20 --apply | tee "$batch_log"
+            if grep -Fq "Batch limit reached; resume next run" "$batch_log"; then
+              rm -f "$batch_log"
+              continue
+            fi
+            rm -f "$batch_log"
+            echo "All archived days checked; no further import batches needed"
+            break
           done
       - name: Back up validated days into private repository (if configured)
         env:
